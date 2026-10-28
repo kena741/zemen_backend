@@ -108,6 +108,7 @@ async def create_customer_booking(
         payment_completed=False,
         payment_status="pending_payment",
         pre_payment_extra_charge_payment=False,
+        post_job=bool(data.get("post_job") or False),
         post_job_payment=bool(data.get("post_job") or False),
         provider_myself=False,
         description=data.get("description"),

@@ -1,0 +1,1840 @@
+{
+  "admin": {
+    "created_at": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "full_name": {
+      "null": true,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "is_active": {
+      "null": false,
+      "udt": "bool"
+    },
+    "role": {
+      "null": false,
+      "udt": "text"
+    },
+    "updated_at": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "user_id": {
+      "null": false,
+      "udt": "uuid"
+    }
+  },
+  "admin_activity_log": {
+    "action": {
+      "null": false,
+      "udt": "text"
+    },
+    "admin_email": {
+      "null": true,
+      "udt": "text"
+    },
+    "admin_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "admin_name": {
+      "null": true,
+      "udt": "text"
+    },
+    "admin_role": {
+      "null": true,
+      "udt": "text"
+    },
+    "created_at": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "env": {
+      "null": false,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "metadata": {
+      "null": false,
+      "udt": "jsonb"
+    },
+    "resource_id": {
+      "null": true,
+      "udt": "text"
+    },
+    "resource_type": {
+      "null": false,
+      "udt": "text"
+    },
+    "route": {
+      "null": true,
+      "udt": "text"
+    },
+    "summary": {
+      "null": false,
+      "udt": "text"
+    }
+  },
+  "admin_role": {
+    "created_at": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "description": {
+      "null": true,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "is_system": {
+      "null": false,
+      "udt": "bool"
+    },
+    "name": {
+      "null": false,
+      "udt": "text"
+    },
+    "permissions": {
+      "null": false,
+      "udt": "_text"
+    },
+    "slug": {
+      "null": false,
+      "udt": "text"
+    },
+    "updated_at": {
+      "null": false,
+      "udt": "timestamptz"
+    }
+  },
+  "app_settings": {
+    "data": {
+      "null": false,
+      "udt": "jsonb"
+    },
+    "id": {
+      "null": false,
+      "udt": "text"
+    },
+    "updated_at": {
+      "null": true,
+      "udt": "timestamptz"
+    }
+  },
+  "banner": {
+    "active": {
+      "null": false,
+      "udt": "bool"
+    },
+    "bannerName": {
+      "null": true,
+      "udt": "text"
+    },
+    "created_at": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "id": {
+      "null": false,
+      "udt": "int8"
+    },
+    "image": {
+      "null": true,
+      "udt": "text"
+    },
+    "link": {
+      "null": true,
+      "udt": "text"
+    }
+  },
+  "booked_service": {
+    "adminCommission": {
+      "null": true,
+      "udt": "numeric"
+    },
+    "archive_note": {
+      "null": true,
+      "udt": "text"
+    },
+    "bookingAddress": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "bookingDate": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "countryCode": {
+      "null": true,
+      "udt": "text"
+    },
+    "coupon": {
+      "null": true,
+      "udt": "text"
+    },
+    "createdAt": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "currentPeriodEnd": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "currentPeriodStart": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "customer_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "customer_user_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "description": {
+      "null": true,
+      "udt": "text"
+    },
+    "discount": {
+      "null": true,
+      "udt": "text"
+    },
+    "email": {
+      "null": true,
+      "udt": "text"
+    },
+    "endTime": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "extraChargeAmount": {
+      "null": true,
+      "udt": "text"
+    },
+    "extraChargeGst": {
+      "null": true,
+      "udt": "bool"
+    },
+    "extraChargeModel": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "firstName": {
+      "null": false,
+      "udt": "text"
+    },
+    "handyman_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "holdTime": {
+      "null": true,
+      "udt": "_jsonb"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "is_archived": {
+      "null": false,
+      "udt": "bool"
+    },
+    "lastName": {
+      "null": false,
+      "udt": "text"
+    },
+    "nextCycleDue": {
+      "null": false,
+      "udt": "bool"
+    },
+    "nextCycleNotifiedAt": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "otp": {
+      "null": true,
+      "udt": "text"
+    },
+    "paymentCompleted": {
+      "null": false,
+      "udt": "bool"
+    },
+    "paymentType": {
+      "null": true,
+      "udt": "text"
+    },
+    "payment_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "payment_status": {
+      "null": false,
+      "udt": "payment_status_enum"
+    },
+    "phoneNumber": {
+      "null": false,
+      "udt": "text"
+    },
+    "postJob": {
+      "null": true,
+      "udt": "bool"
+    },
+    "postJobPayment": {
+      "null": false,
+      "udt": "bool"
+    },
+    "prePaymentExtraChargePayment": {
+      "null": false,
+      "udt": "bool"
+    },
+    "price": {
+      "null": true,
+      "udt": "numeric"
+    },
+    "providerMySelf": {
+      "null": false,
+      "udt": "bool"
+    },
+    "provider_id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "provider_user_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "quantity": {
+      "null": false,
+      "udt": "int4"
+    },
+    "reason": {
+      "null": true,
+      "udt": "text"
+    },
+    "serviceDetails": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "serviceImage": {
+      "null": true,
+      "udt": "text"
+    },
+    "serviceName": {
+      "null": true,
+      "udt": "text"
+    },
+    "service_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "service_proof": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "service_proof_updated_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "startTime": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "status": {
+      "null": true,
+      "udt": "status"
+    },
+    "subTotal": {
+      "null": true,
+      "udt": "numeric"
+    },
+    "taxList": {
+      "null": false,
+      "udt": "jsonb"
+    },
+    "totalAmount": {
+      "null": true,
+      "udt": "numeric"
+    }
+  },
+  "category": {
+    "active": {
+      "null": true,
+      "udt": "bool"
+    },
+    "categoryName": {
+      "null": false,
+      "udt": "text"
+    },
+    "description": {
+      "null": true,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "image": {
+      "null": true,
+      "udt": "text"
+    }
+  },
+  "chat": {
+    "chatID": {
+      "null": false,
+      "udt": "text"
+    },
+    "created_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "mediaUrl": {
+      "null": true,
+      "udt": "text"
+    },
+    "message": {
+      "null": true,
+      "udt": "text"
+    },
+    "receiverId": {
+      "null": false,
+      "udt": "text"
+    },
+    "seen": {
+      "null": true,
+      "udt": "bool"
+    },
+    "senderId": {
+      "null": false,
+      "udt": "text"
+    },
+    "timestamp": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "type": {
+      "null": true,
+      "udt": "text"
+    },
+    "updated_at": {
+      "null": true,
+      "udt": "timestamptz"
+    }
+  },
+  "chat_inbox": {
+    "archive": {
+      "null": true,
+      "udt": "bool"
+    },
+    "created_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "id": {
+      "null": false,
+      "udt": "text"
+    },
+    "lastMessage": {
+      "null": true,
+      "udt": "text"
+    },
+    "mediaUrl": {
+      "null": true,
+      "udt": "text"
+    },
+    "receiverId": {
+      "null": false,
+      "udt": "text"
+    },
+    "seen": {
+      "null": true,
+      "udt": "bool"
+    },
+    "senderId": {
+      "null": false,
+      "udt": "text"
+    },
+    "timestamp": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "type": {
+      "null": true,
+      "udt": "text"
+    },
+    "updated_at": {
+      "null": true,
+      "udt": "timestamptz"
+    }
+  },
+  "companies": {
+    "banner_image": {
+      "null": true,
+      "udt": "text"
+    },
+    "company_name": {
+      "null": true,
+      "udt": "text"
+    },
+    "company_size": {
+      "null": true,
+      "udt": "text"
+    },
+    "created_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "founded": {
+      "null": true,
+      "udt": "text"
+    },
+    "headquarters": {
+      "null": true,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "industry": {
+      "null": true,
+      "udt": "text"
+    },
+    "name": {
+      "null": false,
+      "udt": "text"
+    },
+    "profile_bio": {
+      "null": true,
+      "udt": "text"
+    },
+    "provider_id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "updated_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "website": {
+      "null": true,
+      "udt": "text"
+    }
+  },
+  "country_tax": {
+    "active": {
+      "null": true,
+      "udt": "bool"
+    },
+    "country": {
+      "null": true,
+      "udt": "text"
+    },
+    "created_at": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "id": {
+      "null": false,
+      "udt": "int8"
+    },
+    "isFix": {
+      "null": true,
+      "udt": "bool"
+    },
+    "name": {
+      "null": true,
+      "udt": "text"
+    },
+    "type": {
+      "null": true,
+      "udt": "text"
+    },
+    "value": {
+      "null": true,
+      "udt": "numeric"
+    }
+  },
+  "coupon": {
+    "active": {
+      "null": true,
+      "udt": "bool"
+    },
+    "amount": {
+      "null": true,
+      "udt": "numeric"
+    },
+    "code": {
+      "null": true,
+      "udt": "text"
+    },
+    "created_at": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "expiredAt": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "id": {
+      "null": false,
+      "udt": "int8"
+    },
+    "isFix": {
+      "null": true,
+      "udt": "bool"
+    },
+    "isPrivate": {
+      "null": true,
+      "udt": "bool"
+    },
+    "minAmount": {
+      "null": true,
+      "udt": "numeric"
+    },
+    "title": {
+      "null": true,
+      "udt": "text"
+    }
+  },
+  "currencies": {
+    "active": {
+      "null": false,
+      "udt": "bool"
+    },
+    "createdAt": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "decimalDigits": {
+      "null": true,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "int8"
+    },
+    "name": {
+      "null": true,
+      "udt": "text"
+    },
+    "symbol": {
+      "null": true,
+      "udt": "text"
+    },
+    "symbolAtRight": {
+      "null": true,
+      "udt": "bool"
+    }
+  },
+  "customer": {
+    "active": {
+      "null": true,
+      "udt": "bool"
+    },
+    "address": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "admin_note": {
+      "null": true,
+      "udt": "text"
+    },
+    "archived_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "country_code": {
+      "null": true,
+      "udt": "text"
+    },
+    "created_at": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "customer_addresses": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "default_address": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "email": {
+      "null": true,
+      "udt": "text"
+    },
+    "fcm_token": {
+      "null": true,
+      "udt": "text"
+    },
+    "first_name": {
+      "null": false,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "last_name": {
+      "null": false,
+      "udt": "text"
+    },
+    "login_type": {
+      "null": true,
+      "udt": "text"
+    },
+    "password": {
+      "null": true,
+      "udt": "text"
+    },
+    "phone": {
+      "null": false,
+      "udt": "text"
+    },
+    "profile_pic": {
+      "null": true,
+      "udt": "text"
+    },
+    "signup_source": {
+      "null": true,
+      "udt": "text"
+    },
+    "slug": {
+      "null": true,
+      "udt": "text"
+    },
+    "updated_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "user_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "user_name": {
+      "null": true,
+      "udt": "text"
+    },
+    "wallet_amount": {
+      "null": true,
+      "udt": "numeric"
+    }
+  },
+  "customer_service_details": {
+    "address": {
+      "null": true,
+      "udt": "text"
+    },
+    "category_active": {
+      "null": true,
+      "udt": "bool"
+    },
+    "category_id": {
+      "null": true,
+      "udt": "text"
+    },
+    "category_image": {
+      "null": true,
+      "udt": "text"
+    },
+    "category_model_id": {
+      "null": true,
+      "udt": "text"
+    },
+    "category_name": {
+      "null": true,
+      "udt": "text"
+    },
+    "create_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "customer_service_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "description": {
+      "null": true,
+      "udt": "text"
+    },
+    "discount": {
+      "null": true,
+      "udt": "text"
+    },
+    "duration": {
+      "null": true,
+      "udt": "text"
+    },
+    "feature": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "liked_user": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "location_latitude": {
+      "null": true,
+      "udt": "float8"
+    },
+    "location_longitude": {
+      "null": true,
+      "udt": "float8"
+    },
+    "position_geohash": {
+      "null": true,
+      "udt": "text"
+    },
+    "position_geopoint": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "pre_payment": {
+      "null": true,
+      "udt": "bool"
+    },
+    "price": {
+      "null": true,
+      "udt": "float8"
+    },
+    "provider_id": {
+      "null": true,
+      "udt": "text"
+    },
+    "review_count": {
+      "null": true,
+      "udt": "float8"
+    },
+    "review_sum": {
+      "null": true,
+      "udt": "float8"
+    },
+    "service_images": {
+      "null": true,
+      "udt": "_text"
+    },
+    "service_name": {
+      "null": true,
+      "udt": "text"
+    },
+    "status": {
+      "null": true,
+      "udt": "text"
+    },
+    "sub_category_id": {
+      "null": true,
+      "udt": "text"
+    },
+    "sub_category_model": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "type": {
+      "null": true,
+      "udt": "text"
+    }
+  },
+  "customers_service": {
+    "created_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "customer_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    }
+  },
+  "documents": {
+    "active": {
+      "null": false,
+      "udt": "bool"
+    },
+    "description": {
+      "null": true,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "name": {
+      "null": true,
+      "udt": "text"
+    }
+  },
+  "handyman": {
+    "active": {
+      "null": true,
+      "udt": "bool"
+    },
+    "address": {
+      "null": true,
+      "udt": "text"
+    },
+    "category": {
+      "null": true,
+      "udt": "text"
+    },
+    "categoryId": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "countryCode": {
+      "null": true,
+      "udt": "text"
+    },
+    "createdAt": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "email": {
+      "null": true,
+      "udt": "text"
+    },
+    "fcmToken": {
+      "null": true,
+      "udt": "text"
+    },
+    "firstName": {
+      "null": true,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "isActive": {
+      "null": true,
+      "udt": "bool"
+    },
+    "lastName": {
+      "null": true,
+      "udt": "text"
+    },
+    "password": {
+      "null": true,
+      "udt": "text"
+    },
+    "phoneNumber": {
+      "null": true,
+      "udt": "text"
+    },
+    "profileImage": {
+      "null": true,
+      "udt": "text"
+    },
+    "provider_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "slug": {
+      "null": true,
+      "udt": "text"
+    },
+    "subCategory": {
+      "null": true,
+      "udt": "text"
+    },
+    "subCategoryId": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "userName": {
+      "null": true,
+      "udt": "text"
+    },
+    "userType": {
+      "null": true,
+      "udt": "text"
+    },
+    "user_id": {
+      "null": true,
+      "udt": "uuid"
+    }
+  },
+  "job_request": {
+    "accepted": {
+      "null": true,
+      "udt": "bool"
+    },
+    "bidList": {
+      "null": true,
+      "udt": "_jsonb"
+    },
+    "bidPrice": {
+      "null": true,
+      "udt": "text"
+    },
+    "createdAt": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "customerId": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "description": {
+      "null": true,
+      "udt": "text"
+    },
+    "handymanId": {
+      "null": true,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "text"
+    },
+    "is_paid": {
+      "null": true,
+      "udt": "bool"
+    },
+    "price": {
+      "null": true,
+      "udt": "text"
+    },
+    "providerId": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "serviceId": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "serviceModelList": {
+      "null": true,
+      "udt": "_jsonb"
+    },
+    "status": {
+      "null": true,
+      "udt": "feature_request_status_enum"
+    },
+    "title": {
+      "null": true,
+      "udt": "text"
+    }
+  },
+  "languages": {
+    "active": {
+      "null": true,
+      "udt": "bool"
+    },
+    "code": {
+      "null": true,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "name": {
+      "null": true,
+      "udt": "text"
+    }
+  },
+  "mobile_app_config": {
+    "app_key": {
+      "null": false,
+      "udt": "text"
+    },
+    "created_at": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "maintenance_affected_versions": {
+      "null": false,
+      "udt": "jsonb"
+    },
+    "maintenance_message": {
+      "null": true,
+      "udt": "text"
+    },
+    "maintenance_mode": {
+      "null": false,
+      "udt": "bool"
+    },
+    "update_affected_versions": {
+      "null": false,
+      "udt": "jsonb"
+    },
+    "update_message": {
+      "null": true,
+      "udt": "text"
+    },
+    "update_needed": {
+      "null": false,
+      "udt": "bool"
+    },
+    "updated_at": {
+      "null": false,
+      "udt": "timestamptz"
+    }
+  },
+  "notification": {
+    "action_url": {
+      "null": true,
+      "udt": "text"
+    },
+    "booking_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "created_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "customer_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "description": {
+      "null": true,
+      "udt": "text"
+    },
+    "handyman_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "is_read": {
+      "null": false,
+      "udt": "bool"
+    },
+    "provider_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "read_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "recipient_role": {
+      "null": false,
+      "udt": "text"
+    },
+    "sender_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "title": {
+      "null": true,
+      "udt": "text"
+    },
+    "type": {
+      "null": true,
+      "udt": "text"
+    }
+  },
+  "payments": {
+    "amount": {
+      "null": false,
+      "udt": "numeric"
+    },
+    "booking_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "created_at": {
+      "null": true,
+      "udt": "timestamp"
+    },
+    "currency": {
+      "null": true,
+      "udt": "text"
+    },
+    "customer_id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "payment_method": {
+      "null": true,
+      "udt": "text"
+    },
+    "provider": {
+      "null": true,
+      "udt": "text"
+    },
+    "provider_ref": {
+      "null": true,
+      "udt": "text"
+    },
+    "status": {
+      "null": false,
+      "udt": "payment_status_enum"
+    },
+    "updated_at": {
+      "null": true,
+      "udt": "timestamp"
+    }
+  },
+  "provider": {
+    "activation_paid": {
+      "null": false,
+      "udt": "bool"
+    },
+    "activation_paid_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "activation_tx_ref": {
+      "null": true,
+      "udt": "text"
+    },
+    "active": {
+      "null": false,
+      "udt": "bool"
+    },
+    "address": {
+      "null": true,
+      "udt": "text"
+    },
+    "admin_note": {
+      "null": true,
+      "udt": "text"
+    },
+    "archived_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "banner": {
+      "null": true,
+      "udt": "text"
+    },
+    "categoryId": {
+      "null": true,
+      "udt": "text"
+    },
+    "company_license_url": {
+      "null": true,
+      "udt": "text"
+    },
+    "company_rejection_reason": {
+      "null": true,
+      "udt": "text"
+    },
+    "company_verification_status": {
+      "null": true,
+      "udt": "company_verification_status"
+    },
+    "country": {
+      "null": true,
+      "udt": "text"
+    },
+    "countryCode": {
+      "null": true,
+      "udt": "text"
+    },
+    "createdAt": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "currency": {
+      "null": true,
+      "udt": "text"
+    },
+    "email": {
+      "null": true,
+      "udt": "text"
+    },
+    "fcmToken": {
+      "null": true,
+      "udt": "text"
+    },
+    "firstName": {
+      "null": true,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "lastName": {
+      "null": true,
+      "udt": "text"
+    },
+    "location": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "password": {
+      "null": true,
+      "udt": "text"
+    },
+    "phoneNumber": {
+      "null": true,
+      "udt": "text"
+    },
+    "professionId": {
+      "null": true,
+      "udt": "text"
+    },
+    "profileImage": {
+      "null": true,
+      "udt": "text"
+    },
+    "provider_type": {
+      "null": true,
+      "udt": "provider_type"
+    },
+    "service_tier_max": {
+      "null": false,
+      "udt": "int4"
+    },
+    "service_tier_paid_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "service_tier_tx_ref": {
+      "null": true,
+      "udt": "text"
+    },
+    "signupSource": {
+      "null": true,
+      "udt": "text"
+    },
+    "slug": {
+      "null": true,
+      "udt": "text"
+    },
+    "socialLinks": {
+      "null": false,
+      "udt": "jsonb"
+    },
+    "updateAt": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "userName": {
+      "null": true,
+      "udt": "text"
+    },
+    "userType": {
+      "null": true,
+      "udt": "text"
+    },
+    "user_id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "verified_subcategory_ids": {
+      "null": false,
+      "udt": "_uuid"
+    },
+    "walletAmount": {
+      "null": true,
+      "udt": "text"
+    }
+  },
+  "provider_payment_methods": {
+    "accountNumber": {
+      "null": true,
+      "udt": "text"
+    },
+    "bankName": {
+      "null": true,
+      "udt": "text"
+    },
+    "branchCity": {
+      "null": true,
+      "udt": "text"
+    },
+    "branchCountry": {
+      "null": true,
+      "udt": "text"
+    },
+    "created_at": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "currency": {
+      "null": false,
+      "udt": "text"
+    },
+    "holderName": {
+      "null": true,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "is_active": {
+      "null": false,
+      "udt": "bool"
+    },
+    "is_default": {
+      "null": false,
+      "udt": "bool"
+    },
+    "metadata": {
+      "null": false,
+      "udt": "jsonb"
+    },
+    "method_code": {
+      "null": false,
+      "udt": "text"
+    },
+    "method_name": {
+      "null": false,
+      "udt": "text"
+    },
+    "method_type": {
+      "null": false,
+      "udt": "text"
+    },
+    "providerID": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "swiftCode": {
+      "null": true,
+      "udt": "text"
+    },
+    "updated_at": {
+      "null": false,
+      "udt": "timestamptz"
+    }
+  },
+  "review_customer": {
+    "bookingId": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "comment": {
+      "null": false,
+      "udt": "text"
+    },
+    "customerId": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "date": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "rating": {
+      "null": true,
+      "udt": "text"
+    },
+    "serviceId": {
+      "null": true,
+      "udt": "uuid"
+    }
+  },
+  "service": {
+    "active": {
+      "null": true,
+      "udt": "bool"
+    },
+    "address": {
+      "null": true,
+      "udt": "text"
+    },
+    "allows_custom_offer": {
+      "null": false,
+      "udt": "bool"
+    },
+    "approved": {
+      "null": false,
+      "udt": "bool"
+    },
+    "billing_interval": {
+      "null": true,
+      "udt": "text"
+    },
+    "billing_interval_count": {
+      "null": true,
+      "udt": "int4"
+    },
+    "categoryId": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "categoryModel": {
+      "null": false,
+      "udt": "jsonb"
+    },
+    "createdAt": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "description": {
+      "null": true,
+      "udt": "text"
+    },
+    "discount": {
+      "null": true,
+      "udt": "text"
+    },
+    "duration": {
+      "null": true,
+      "udt": "text"
+    },
+    "feature": {
+      "null": false,
+      "udt": "bool"
+    },
+    "feature_requested_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "feature_requested_status": {
+      "null": true,
+      "udt": "feature_request_status_enum"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "isArchived": {
+      "null": true,
+      "udt": "bool"
+    },
+    "likedUser": {
+      "null": true,
+      "udt": "_text"
+    },
+    "liked_users": {
+      "null": true,
+      "udt": "_uuid"
+    },
+    "location": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "position": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "prePayment": {
+      "null": false,
+      "udt": "bool"
+    },
+    "prePaymentPercent": {
+      "null": true,
+      "udt": "numeric"
+    },
+    "price": {
+      "null": false,
+      "udt": "numeric"
+    },
+    "pricing_type": {
+      "null": false,
+      "udt": "text"
+    },
+    "provider_id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "reviewCount": {
+      "null": true,
+      "udt": "int4"
+    },
+    "reviewSum": {
+      "null": true,
+      "udt": "numeric"
+    },
+    "serviceImage": {
+      "null": false,
+      "udt": "_text"
+    },
+    "serviceLocationMode": {
+      "null": false,
+      "udt": "text"
+    },
+    "serviceName": {
+      "null": false,
+      "udt": "text"
+    },
+    "slug": {
+      "null": true,
+      "udt": "text"
+    },
+    "status": {
+      "null": false,
+      "udt": "bool"
+    },
+    "subCategoryId": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "subCategoryModel": {
+      "null": false,
+      "udt": "jsonb"
+    },
+    "type": {
+      "null": false,
+      "udt": "text"
+    },
+    "video": {
+      "null": true,
+      "udt": "text"
+    }
+  },
+  "service_offer": {
+    "booking_address": {
+      "null": true,
+      "udt": "jsonb"
+    },
+    "booking_date": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "booking_id": {
+      "null": true,
+      "udt": "text"
+    },
+    "created_at": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "customer_id": {
+      "null": false,
+      "udt": "text"
+    },
+    "expires_at": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "message": {
+      "null": true,
+      "udt": "text"
+    },
+    "offered_price": {
+      "null": false,
+      "udt": "numeric"
+    },
+    "provider_id": {
+      "null": false,
+      "udt": "text"
+    },
+    "service_description": {
+      "null": true,
+      "udt": "text"
+    },
+    "service_id": {
+      "null": false,
+      "udt": "text"
+    },
+    "status": {
+      "null": false,
+      "udt": "text"
+    },
+    "updated_at": {
+      "null": false,
+      "udt": "timestamptz"
+    }
+  },
+  "sub_category": {
+    "categoryId": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "isFree": {
+      "null": false,
+      "udt": "bool"
+    },
+    "subCategoryName": {
+      "null": false,
+      "udt": "text"
+    }
+  },
+  "sub_category_documents": {
+    "description": {
+      "null": true,
+      "udt": "text"
+    },
+    "documentId": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "isRequired": {
+      "null": true,
+      "udt": "bool"
+    },
+    "subCategoryId": {
+      "null": false,
+      "udt": "uuid"
+    }
+  },
+  "verify_documents": {
+    "createdAt": {
+      "null": false,
+      "udt": "timestamptz"
+    },
+    "documentId": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "documentImage": {
+      "null": true,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "isVerify": {
+      "null": true,
+      "udt": "bool"
+    },
+    "providerEmail": {
+      "null": true,
+      "udt": "text"
+    },
+    "providerId": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "providerName": {
+      "null": true,
+      "udt": "text"
+    }
+  },
+  "wallet_transaction": {
+    "amount": {
+      "null": true,
+      "udt": "text"
+    },
+    "createdDate": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "customer_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "isCredit": {
+      "null": true,
+      "udt": "bool"
+    },
+    "note": {
+      "null": true,
+      "udt": "text"
+    },
+    "paymentType": {
+      "null": true,
+      "udt": "text"
+    },
+    "provider_id": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "transactionId": {
+      "null": true,
+      "udt": "text"
+    },
+    "type": {
+      "null": true,
+      "udt": "text"
+    },
+    "userId": {
+      "null": true,
+      "udt": "uuid"
+    }
+  },
+  "withdrawal_history": {
+    "accountNumber": {
+      "null": true,
+      "udt": "text"
+    },
+    "adminNote": {
+      "null": true,
+      "udt": "text"
+    },
+    "amount": {
+      "null": true,
+      "udt": "text"
+    },
+    "bankName": {
+      "null": true,
+      "udt": "text"
+    },
+    "createdDate": {
+      "null": true,
+      "udt": "timestamptz"
+    },
+    "holderName": {
+      "null": true,
+      "udt": "text"
+    },
+    "id": {
+      "null": false,
+      "udt": "uuid"
+    },
+    "note": {
+      "null": true,
+      "udt": "text"
+    },
+    "paymentDate": {
+      "null": true,
+      "udt": "text"
+    },
+    "paymentMethodId": {
+      "null": true,
+      "udt": "text"
+    },
+    "paymentStatus": {
+      "null": true,
+      "udt": "text"
+    },
+    "providerId": {
+      "null": true,
+      "udt": "uuid"
+    },
+    "rejectionReason": {
+      "null": true,
+      "udt": "text"
+    },
+    "swiftCode": {
+      "null": true,
+      "udt": "text"
+    }
+  }
+}

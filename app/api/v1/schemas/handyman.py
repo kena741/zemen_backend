@@ -19,6 +19,7 @@ class HandymanOut(APIModel):
     active: bool | None = None
     is_active: bool | None = Field(default=None, serialization_alias="isActive")
     address: str | None = None
+    fcm_token: str | None = Field(default=None, serialization_alias="fcmToken")
     created_at: datetime | None = Field(default=None, serialization_alias="createdAt")
 
 

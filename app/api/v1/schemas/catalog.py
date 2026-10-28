@@ -63,6 +63,9 @@ class ServiceOut(APIModel):
     pre_payment_percent: Decimal | None = Field(default=None, serialization_alias="prePaymentPercent")
     created_at: datetime = Field(serialization_alias="createdAt")
     liked_user: list[str] = Field(default_factory=list, serialization_alias="likedUser")
+    position: dict | None = None
+    duration: str | None = None
+    address: str | None = None
 
     @field_validator("liked_user", mode="before")
     @classmethod

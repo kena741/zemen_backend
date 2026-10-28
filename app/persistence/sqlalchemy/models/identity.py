@@ -71,9 +71,15 @@ class Provider(Base):
         ARRAY(Uuid(as_uuid=True)), nullable=False, default=list
     )
     signup_source: Mapped[str | None] = mapped_column("signupSource", Text, nullable=True)
+    profession_id: Mapped[str | None] = mapped_column("professionId", Text, nullable=True)
+    category_id: Mapped[str | None] = mapped_column("categoryId", Text, nullable=True)
+    company_license_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    company_rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    service_tier_tx_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column("createdAt", DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column("updateAt", DateTime(timezone=True), nullable=False)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # `password` and `admin_note` stay unmapped (legacy hash / staff-only).
 
 
 class Handyman(Base):
@@ -99,6 +105,7 @@ class Handyman(Base):
     country_code: Mapped[str | None] = mapped_column("countryCode", Text, nullable=True)
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     slug: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fcm_token: Mapped[str | None] = mapped_column("fcmToken", Text, nullable=True)
     # `password` (legacy plaintext column) is intentionally not mapped.
 
 

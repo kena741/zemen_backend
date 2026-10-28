@@ -30,6 +30,8 @@ class AdminRole(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     permissions: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
     is_system: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class AdminActivityLog(Base):

@@ -38,7 +38,23 @@ class BookingOut(APIModel):
     next_cycle_due: bool = Field(serialization_alias="nextCycleDue")
     current_period_start: datetime | None = Field(default=None, serialization_alias="currentPeriodStart")
     current_period_end: datetime | None = Field(default=None, serialization_alias="currentPeriodEnd")
+    next_cycle_notified_at: datetime | None = Field(default=None, serialization_alias="nextCycleNotifiedAt")
     created_at: datetime = Field(serialization_alias="createdAt")
+    otp: str | None = None
+    start_time: datetime | None = Field(default=None, serialization_alias="startTime")
+    end_time: datetime | None = Field(default=None, serialization_alias="endTime")
+    hold_time: list[Any] | None = Field(default=None, serialization_alias="holdTime")
+    extra_charge_amount: str | None = Field(default=None, serialization_alias="extraChargeAmount")
+    extra_charge_gst: bool | None = Field(default=None, serialization_alias="extraChargeGst")
+    extra_charge_model: dict | None = Field(default=None, serialization_alias="extraChargeModel")
+    post_job: bool | None = Field(default=None, serialization_alias="postJob")
+    post_job_payment: bool | None = Field(default=None, serialization_alias="postJobPayment")
+    pre_payment_extra_charge_payment: bool | None = Field(
+        default=None, serialization_alias="prePaymentExtraChargePayment"
+    )
+    coupon: str | None = None
+    reason: str | None = None
+    service_proof: dict | None = None
 
 
 class BookingCreate(APIModel):

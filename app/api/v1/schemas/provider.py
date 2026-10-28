@@ -28,6 +28,12 @@ class ProviderOut(APIModel):
     provider_type: str | None = None
     company_verification_status: str | None = None
     service_tier_max: int
+    service_tier_tx_ref: str | None = None
+    profession_id: str | None = Field(default=None, serialization_alias="professionId")
+    category_id: str | None = Field(default=None, serialization_alias="categoryId")
+    company_license_url: str | None = None
+    company_rejection_reason: str | None = None
+    location: Any | None = None
     created_at: datetime = Field(serialization_alias="createdAt")
 
 

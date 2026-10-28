@@ -43,7 +43,7 @@ class AdminServiceOut(APIModel):
     allows_custom_offer: bool
     approved: bool
     feature: bool
-    feature_requested_status: str
+    feature_requested_status: str | None = "none"
     is_archived: bool | None = Field(default=None, serialization_alias="isArchived")
     status: bool
     active: bool | None = None

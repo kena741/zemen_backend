@@ -61,7 +61,23 @@ class BookedService(Base):
     )
     next_cycle_due: Mapped[bool] = mapped_column("nextCycleDue", Boolean, nullable=False, default=False)
     service_proof: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    service_proof_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     admin_commission: Mapped[Decimal | None] = mapped_column("adminCommission", Numeric, nullable=True)
+    otp: Mapped[str | None] = mapped_column(Text, nullable=True)
+    start_time: Mapped[datetime | None] = mapped_column("startTime", DateTime(timezone=True), nullable=True)
+    end_time: Mapped[datetime | None] = mapped_column("endTime", DateTime(timezone=True), nullable=True)
+    hold_time: Mapped[list | None] = mapped_column("holdTime", ARRAY(JSONB), nullable=True)
+    extra_charge_amount: Mapped[str | None] = mapped_column("extraChargeAmount", Text, nullable=True)
+    extra_charge_gst: Mapped[bool | None] = mapped_column("extraChargeGst", Boolean, nullable=True)
+    extra_charge_model: Mapped[dict | None] = mapped_column("extraChargeModel", JSONB, nullable=True)
+    post_job: Mapped[bool | None] = mapped_column("postJob", Boolean, nullable=True)
+    coupon: Mapped[str | None] = mapped_column(Text, nullable=True)
+    archive_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_cycle_notified_at: Mapped[datetime | None] = mapped_column(
+        "nextCycleNotifiedAt", DateTime(timezone=True), nullable=True
+    )
 
 
 class ServiceOffer(Base):

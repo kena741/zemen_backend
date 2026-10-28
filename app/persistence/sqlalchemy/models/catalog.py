@@ -66,11 +66,13 @@ class Service(Base):
     pre_payment_percent: Mapped[Decimal | None] = mapped_column("prePaymentPercent", Numeric, nullable=True)
     video: Mapped[str | None] = mapped_column(Text, nullable=True)
     feature_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    feature_requested_status: Mapped[str] = mapped_column(
+    feature_requested_status: Mapped[str | None] = mapped_column(
         FEATURE_REQUEST_STATUS,
-        nullable=False,
+        nullable=True,
         default="none",
     )
+    position: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    liked_users: Mapped[list[UUID] | None] = mapped_column(ARRAY(Uuid(as_uuid=True)), nullable=True)
 
 
 class CustomersService(Base):
@@ -98,3 +100,18 @@ class CustomerServiceDetail(Base):
     sub_category_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     sub_category_model: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime | None] = mapped_column("create_at", DateTime(timezone=True), nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    discount: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration: Mapped[str | None] = mapped_column(Text, nullable=True)
+    feature: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    liked_user: Mapped[dict | list | None] = mapped_column(JSONB, nullable=True)
+    location_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    position_geohash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    position_geopoint: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    pre_payment: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    provider_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_count: Mapped[float | None] = mapped_column(Float, nullable=True)
+    review_sum: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str | None] = mapped_column(Text, nullable=True)
+    type: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -1,0 +1,17 @@
+# Local API process. Prefer pointing DATABASE_URL at Supabase (betegna) pooler
+# rather than cloning production data. Optional local Postgres is for offline experiments only.
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: zemen-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - .:/opt/app
+      - /opt/app/.venv
+    environment:
+      - PYTHONUNBUFFERED=1

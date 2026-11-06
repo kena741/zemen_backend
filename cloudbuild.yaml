@@ -1,0 +1,51 @@
+steps:
+  - id: install-test-dependencies
+    name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    entrypoint: uv
+    args: ["sync", "--frozen", "--group", "dev"]
+
+  - id: run-tests
+    name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    entrypoint: uv
+    args: ["run", "pytest"]
+    waitFor: ["install-test-dependencies"]
+
+  - id: run-self-check
+    name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    entrypoint: uv
+    args: ["run", "python", "scripts/self_check.py"]
+    waitFor: ["install-test-dependencies"]
+
+  - id: build-image
+    name: gcr.io/cloud-builders/docker
+    env: ["DOCKER_BUILDKIT=1"]
+    args:
+      - build
+      - --platform=linux/amd64
+      - --file=Dockerfile
+      - --tag=europe-west4-docker.pkg.dev/$PROJECT_ID/zemen-service-backend/backend:$SHORT_SHA
+      - .
+    waitFor: ["run-tests", "run-self-check"]
+
+  - id: push-image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - europe-west4-docker.pkg.dev/$PROJECT_ID/zemen-service-backend/backend:$SHORT_SHA
+    waitFor: ["build-image"]
+
+  - id: deploy-cloud-run
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - zemen-service-backend-prod
+      - --image=europe-west4-docker.pkg.dev/$PROJECT_ID/zemen-service-backend/backend:$SHORT_SHA
+      - --region=europe-west4
+      - --project=$PROJECT_ID
+      - --quiet
+    waitFor: ["push-image"]
+
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -25,11 +25,14 @@ steps:
   # 4. Build and push Docker image
   - id: build-and-push-image
     name: gcr.io/cloud-builders/docker
+    env:
+      - "DOCKER_BUILDKIT=1"
     entrypoint: bash
     args:
       - -c
       - |
         set -euo pipefail
+        export DOCKER_BUILDKIT=1
         docker build -f Dockerfile \
           --platform=linux/amd64 \
           -t "${_IMAGE_URI}:${SHORT_SHA}" \

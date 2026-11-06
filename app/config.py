@@ -1,16 +1,47 @@
-from enum import IntEnum
+from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+ROOT_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT_DIR / ".env")
 
 
-class EnvironmentOptions(IntEnum):
-    DEVELOPMENT = 1
-    STAGING = 2
-    PRODUCTION = 4
+class EnvironmentOptions(str, Enum):
+    DEVELOPMENT = "development"
+    STAGING = "staging"
+    PRODUCTION = "production"
+
+    @classmethod
+    def _missing_(cls, value: object) -> "EnvironmentOptions | None":
+        if isinstance(value, int):
+            int_map = {
+                1: cls.DEVELOPMENT,
+                2: cls.STAGING,
+                4: cls.PRODUCTION,
+            }
+            if value in int_map:
+                return int_map[value]
+        if isinstance(value, str):
+            clean = value.strip().lower()
+            str_map = {
+                "1": cls.DEVELOPMENT,
+                "dev": cls.DEVELOPMENT,
+                "development": cls.DEVELOPMENT,
+                "local": cls.DEVELOPMENT,
+                "2": cls.STAGING,
+                "stage": cls.STAGING,
+                "staging": cls.STAGING,
+                "4": cls.PRODUCTION,
+                "prod": cls.PRODUCTION,
+                "production": cls.PRODUCTION,
+            }
+            if clean in str_map:
+                return str_map[clean]
+        return None
 
 
 class Settings(BaseSettings):
@@ -22,11 +53,24 @@ class Settings(BaseSettings):
 
     ENVIRONMENT: EnvironmentOptions = EnvironmentOptions.DEVELOPMENT
 
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:password@localhost:5432/postgres"
-    DATABASE_POOL_SIZE: int = 10
-    DATABASE_POOL_OVERFLOW: int = 5
+    # Environment-specific Database URLs
+    DEVELOPMENT_DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/zemen_db"
+    STAGING_DATABASE_URL: str | None = None
+    PRODUCTION_DATABASE_URL: str | None = None
+
+    # Backward compatibility aliases
+    DEV_DATABASE_URL: str | None = None
+    PROD_DATABASE_URL: str | None = None
+
+    # Active Database URL (resolved and assigned based on ENVIRONMENT)
+    DATABASE_URL: str | None = None
+
+    # Connection pool configuration
+    DATABASE_POOL_SIZE: int | None = None
+    DATABASE_POOL_OVERFLOW: int | None = None
     DATABASE_POOL_RECYCLE: int = 1800
     DATABASE_POOL_TIMEOUT: int = 30
+    DATABASE_ECHO: bool = False
 
     CORS_ALLOWED_ORIGINS: list[str] = ["*"]
 
@@ -41,6 +85,83 @@ class Settings(BaseSettings):
     PAYMENTS_WRITES_ENABLED: bool = False
     CHAPA_SECRET_KEY: str = ""
     CHAPA_VERIFY_URL: str = "https://api.chapa.co/v1/transaction/verify"
+
+    @field_validator(
+        "DATABASE_POOL_SIZE",
+        "DATABASE_POOL_OVERFLOW",
+        "DATABASE_URL",
+        "STAGING_DATABASE_URL",
+        "PRODUCTION_DATABASE_URL",
+        "DEV_DATABASE_URL",
+        "PROD_DATABASE_URL",
+        mode="before",
+    )
+    @classmethod
+    def empty_str_to_none(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @field_validator("ENVIRONMENT", mode="before")
+    @classmethod
+    def parse_environment(cls, v: Any) -> EnvironmentOptions:
+        if isinstance(v, EnvironmentOptions):
+            return v
+        try:
+            matched = EnvironmentOptions(v)
+            if matched is not None:
+                return matched
+        except (ValueError, TypeError):
+            pass
+        raise ValueError(
+            f"Invalid environment '{v}'. Expected one of: "
+            "development, staging, production."
+        )
+
+    @model_validator(mode="after")
+    def resolve_database_configuration(self) -> "Settings":
+        # 1. Filter and assign DATABASE_URL based on ENVIRONMENT
+        if self.ENVIRONMENT == EnvironmentOptions.DEVELOPMENT:
+            self.DATABASE_URL = (
+                self.DEVELOPMENT_DATABASE_URL
+                or self.DEV_DATABASE_URL
+                or self.DATABASE_URL
+                or "postgresql+asyncpg://postgres:postgres@localhost:5432/zemen_db"
+            )
+        elif self.ENVIRONMENT == EnvironmentOptions.STAGING:
+            self.DATABASE_URL = (
+                self.STAGING_DATABASE_URL
+                or self.DATABASE_URL
+            )
+            if not self.DATABASE_URL:
+                raise ValueError(
+                    "STAGING_DATABASE_URL must be provided when running in staging environment."
+                )
+        elif self.ENVIRONMENT == EnvironmentOptions.PRODUCTION:
+            self.DATABASE_URL = (
+                self.PRODUCTION_DATABASE_URL
+                or self.PROD_DATABASE_URL
+                or self.DATABASE_URL
+            )
+            if not self.DATABASE_URL:
+                raise ValueError(
+                    "PRODUCTION_DATABASE_URL must be provided when running in production environment."
+                )
+
+        # 2. Environment-tuned connection pool defaults
+        if self.DATABASE_POOL_SIZE is None:
+            if self.ENVIRONMENT == EnvironmentOptions.DEVELOPMENT:
+                self.DATABASE_POOL_SIZE = 5
+            else:
+                self.DATABASE_POOL_SIZE = 10
+
+        if self.DATABASE_POOL_OVERFLOW is None:
+            if self.ENVIRONMENT == EnvironmentOptions.DEVELOPMENT:
+                self.DATABASE_POOL_OVERFLOW = 2
+            else:
+                self.DATABASE_POOL_OVERFLOW = 5
+
+        return self
 
     @property
     def supabase_issuer(self) -> str:

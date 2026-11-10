@@ -26,6 +26,19 @@ BOOKING_STATUS = _existing(
     "admin_paid",
 )
 
+BOOKED_SERVICE_STATUS = _existing(
+    "booked_service_status_enum",
+    "booked",
+    "booked_accepted",
+    "booked_rejected",
+    "pending_customer_payment",
+    "paid_for_service_booked",
+    "booked_cancelled",
+    "service_started",
+    "service_completion_approval",
+    "service_completion_approved_by_customer",
+)
+
 PAYMENT_STATUS = _existing(
     "payment_status_enum",
     "pending_payment",
@@ -43,4 +56,28 @@ PROVIDER_TYPE = _existing("provider_type", "individual", "company")
 
 COMPANY_VERIFICATION_STATUS = _existing(
     "company_verification_status", "not_submitted", "pending", "approved", "rejected"
+)
+
+FUNNEL_STAGE = _existing(
+    "funnel_stage",
+    "Lead",
+    "Contacted",
+    "Qualified",
+    "Proposal",
+    "Negotiation",
+    "Won",
+    "Lost",
+)
+
+FEEDBACK_TYPE = _existing("feedback_type", "bug", "idea", "ui-ux", "other")
+
+DOW = _existing(
+    "dow",
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
 )

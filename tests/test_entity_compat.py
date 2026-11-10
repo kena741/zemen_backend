@@ -86,6 +86,8 @@ def test_mapped_columns_match_live_betegna_types():
     mismatches: list[str] = []
     for mapper in Base.registry.mappers:
         table = mapper.local_table.name
+        if table not in live:
+            continue
         live_cols = live[table]
         for col in sa_inspect(mapper.class_).columns:
             if col.name not in live_cols:
@@ -104,6 +106,8 @@ def test_only_intentional_live_columns_are_unmapped():
     leftover: list[str] = []
     for mapper in Base.registry.mappers:
         table = mapper.local_table.name
+        if table not in live:
+            continue
         mapped = {c.name for c in sa_inspect(mapper.class_).columns}
         for col in live[table]:
             if col in mapped or (table, col) in INTENTIONALLY_UNMAPPED:

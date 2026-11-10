@@ -1,10 +1,12 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, Text, Uuid
+from sqlalchemy import Boolean, DateTime, SmallInteger, Text, Uuid
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.persistence.sqlalchemy.base import Base
+from app.persistence.sqlalchemy.enums import FEEDBACK_TYPE
 
 
 class ChatMessage(Base):
@@ -67,3 +69,54 @@ class ReviewCustomer(Base):
     rating: Mapped[str | None] = mapped_column(Text, nullable=True)
     service_id: Mapped[UUID | None] = mapped_column("serviceId", Uuid(as_uuid=True), nullable=True, index=True)
     booking_id: Mapped[UUID | None] = mapped_column("bookingId", Uuid(as_uuid=True), nullable=True)
+
+
+class Notifications(Base):
+    """User notifications (plural) - legacy / mobile app notifications table."""
+
+    __tablename__ = "notifications"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    is_read: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    request_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    booking_id: Mapped[str | None] = mapped_column("bookingId", Text, nullable=True)
+    customer_id: Mapped[UUID | None] = mapped_column("customerId", Uuid(as_uuid=True), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    handyman_id: Mapped[UUID | None] = mapped_column("handymanId", Uuid(as_uuid=True), nullable=True)
+    provider_id: Mapped[UUID | None] = mapped_column("providerId", Uuid(as_uuid=True), nullable=True)
+    sender_id: Mapped[UUID | None] = mapped_column("senderId", Uuid(as_uuid=True), nullable=True)
+    type: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ContactMessage(Base):
+    """Contact form submissions."""
+
+    __tablename__ = "contact_messages"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    email: Mapped[str] = mapped_column(Text, nullable=False)
+    subject: Mapped[str] = mapped_column(Text, nullable=False, default="contact")
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class Feedback(Base):
+    """User submitted feedback."""
+
+    __tablename__ = "feedback"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    user_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True, index=True)
+    user_email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rating: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    type: Mapped[str] = mapped_column(FEEDBACK_TYPE, nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    screenshot_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+

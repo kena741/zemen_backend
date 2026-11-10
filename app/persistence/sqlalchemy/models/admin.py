@@ -86,3 +86,34 @@ class VerifyDocument(Base):
     document_id: Mapped[UUID | None] = mapped_column("documentId", Uuid(as_uuid=True), nullable=True)
     document_image: Mapped[str | None] = mapped_column("documentImage", Text, nullable=True)
     is_verify: Mapped[bool | None] = mapped_column("isVerify", Boolean, nullable=True)
+
+
+class AdminDocument(Base):
+    """Admin-uploaded regulatory or compliance documents."""
+
+    __tablename__ = "admin_documents"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(Text, nullable=False, default="other")
+    storage_path: Mapped[str] = mapped_column(Text, nullable=False)
+    file_name: Mapped[str] = mapped_column(Text, nullable=False)
+    mime_type: Mapped[str] = mapped_column(Text, nullable=False, default="application/pdf")
+    uploaded_by: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DocumentDelivery(Base):
+    """Tracking document dispatches and provider acknowledgments."""
+
+    __tablename__ = "document_deliveries"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    document_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False, index=True)
+    recipient_type: Mapped[str] = mapped_column(Text, nullable=False, default="provider")
+    recipient_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False, index=True)
+    sent_by: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+

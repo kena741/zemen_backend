@@ -10,7 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security.supabase_jwt import decode_supabase_token
+from app.core.auth.jwt import decode_token
 from app.persistence.sqlalchemy.deps import get_db
 from app.persistence.sqlalchemy.models import Customer, Handyman, Provider
 
@@ -47,7 +47,7 @@ def decode_bearer(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
     try:
-        claims = decode_supabase_token(creds.credentials)
+        claims = decode_token(creds.credentials)
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
 

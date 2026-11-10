@@ -86,6 +86,25 @@ class Settings(BaseSettings):
     CHAPA_SECRET_KEY: str = ""
     CHAPA_VERIFY_URL: str = "https://api.chapa.co/v1/transaction/verify"
 
+    # Custom Auth (JWT)
+    JWT_SECRET_KEY: str = "insecure-change-me-in-production-jwt-secret-key-32chars"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+
+    # Google Cloud Storage (GCS)
+    GCS_PROJECT_ID: str | None = None
+    GCS_CREDENTIALS_JSON: str | None = None
+    GCS_CREDENTIALS_FILE: str | None = None
+    GCS_DEFAULT_BUCKET: str = "betegnabucket"
+    GCS_ADMIN_DOCS_BUCKET: str = "admin-documents"
+    GCS_FEEDBACK_BUCKET: str = "feedback"
+    GCS_PUBLIC_URL_BASE: str = "https://storage.googleapis.com"
+
+    # Firebase Cloud Messaging (FCM)
+    FIREBASE_CREDENTIALS_JSON: str | None = None
+    FIREBASE_CREDENTIALS_FILE: str | None = None
+
     @field_validator(
         "DATABASE_POOL_SIZE",
         "DATABASE_POOL_OVERFLOW",

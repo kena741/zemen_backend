@@ -16,3 +16,4 @@ wheels/
 media/
 .cursor/
 uvicorn.log*
+inventory/

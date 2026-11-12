@@ -83,3 +83,4 @@ async def test_delete_customer_job_requests_bulk(crm_service, mock_context):
     count = await service.delete_job_requests(customer_id=cust_id, ctx=mock_context)
     assert count == 3
     job_repo.delete_all_for_customer.assert_called_once_with(cust_id)
+

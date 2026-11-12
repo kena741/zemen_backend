@@ -51,3 +51,4 @@ class AppSettingsRepository(BaseRepository[AppSetting, AppSettingDomain]):
             # Fallback for mock sessions that don't execute returning
             return AppSettingDomain(id=setting_id, data=data, updated_at=now)
         return self.to_domain(entity)
+

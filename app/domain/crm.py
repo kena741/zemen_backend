@@ -21,3 +21,4 @@ class JobRequestDomain:
     provider_id: UUID | None = None
     customer_display_name: str | None = None
     customer_display_phone: str | None = None
+

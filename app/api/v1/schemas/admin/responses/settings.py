@@ -95,3 +95,4 @@ class CouponListResponse(BaseModel):
 
 class CouponSingleResponse(BaseModel):
     data: CouponResponseItem
+

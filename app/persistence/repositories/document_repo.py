@@ -26,3 +26,4 @@ class DocumentTypeRepository(BaseRepository[Document, DocumentTypeDomain]):
         stmt = select(self.model).order_by(self.model.name.asc().nullslast())
         res = await self.session.execute(stmt)
         return [self.to_domain(d) for d in res.scalars().all()]
+

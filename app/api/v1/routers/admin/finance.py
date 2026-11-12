@@ -437,3 +437,4 @@ async def get_chapa_balance(_: CanReadFinance, db: Db) -> ChapaBalanceResponse:
     service = _get_finance_service(db)
     bal = await service.get_chapa_balance()
     return ChapaBalanceResponse.model_validate(bal)
+

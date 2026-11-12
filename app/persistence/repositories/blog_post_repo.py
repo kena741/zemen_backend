@@ -54,3 +54,4 @@ class BlogPostRepository(BaseRepository[BlogPost, BlogPostDomain]):
         res = await self.session.execute(stmt)
         entity = res.scalar_one_or_none()
         return self.to_domain(entity) if entity else None
+

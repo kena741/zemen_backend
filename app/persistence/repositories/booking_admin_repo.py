@@ -274,3 +274,4 @@ class BookingAdminRepository(BaseRepository[BookedService, BookingDetailDomain])
         )
         res = await self.session.execute(stmt)
         return int(res.scalar_one() or 0)
+

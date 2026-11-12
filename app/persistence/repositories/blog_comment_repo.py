@@ -49,3 +49,4 @@ class BlogCommentRepository(BaseRepository[BlogComment, BlogCommentDomain]):
         stmt = delete(self.model).where(self.model.id == comment_id)
         res = await self.session.execute(stmt)
         return bool(res.rowcount and res.rowcount > 0)
+

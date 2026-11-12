@@ -86,3 +86,4 @@ class UpdateCountryTaxRequest(BaseModel):
     type: Literal["percentage", "fixed"] | None = None
     is_fix: bool | None = Field(default=None, alias="isFix")
     active: bool | None = None
+

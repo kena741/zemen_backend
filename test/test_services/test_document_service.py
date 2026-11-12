@@ -130,3 +130,4 @@ async def test_delete_internal_document(document_service, mock_context):
 
     await service.delete_internal_document(doc_id=doc_id, ctx=mock_context)
     internal_repo.delete.assert_called_once_with(doc_id)
+

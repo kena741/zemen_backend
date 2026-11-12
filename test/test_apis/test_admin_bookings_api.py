@@ -269,3 +269,4 @@ def test_get_wallet_ledger_endpoint(api_client, super_admin_context):
         assert len(data) == 1
         assert data[0]["paymentType"] == "payout"
         assert data[0]["isCredit"] is True
+

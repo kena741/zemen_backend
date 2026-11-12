@@ -23,3 +23,4 @@ class DeleteJobRequestPayload(BaseModel):
 
     id: str | None = None
     customer_id: UUID | None = Field(default=None, alias="customerId")
+

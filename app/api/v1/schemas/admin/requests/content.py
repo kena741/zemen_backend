@@ -101,3 +101,4 @@ class PatchTrackerRowRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     values: dict[str, Any]
+

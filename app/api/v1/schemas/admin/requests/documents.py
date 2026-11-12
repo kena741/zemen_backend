@@ -33,3 +33,4 @@ class CreateInternalDocumentRequest(BaseModel):
     file_name: str = Field(alias="fileName")
     storage_path: str = Field(alias="storagePath")
     mime_type: str = Field(default="application/pdf", alias="mimeType")
+

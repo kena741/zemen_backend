@@ -133,3 +133,4 @@ async def test_country_tax_repo_to_domain():
     assert domain.value == 15.0
     assert domain.is_fix is False
     assert domain.active is True
+

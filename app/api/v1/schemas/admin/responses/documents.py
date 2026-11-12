@@ -46,3 +46,4 @@ class AdminInternalDocumentListResponse(BaseModel):
 
 class AdminInternalDocumentSingleResponse(BaseModel):
     document: AdminInternalDocumentResponseItem
+

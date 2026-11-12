@@ -380,3 +380,4 @@ class ContentAdminService:
             summary=f"Deleted row {row_id}",
             ctx=ctx,
         )
+

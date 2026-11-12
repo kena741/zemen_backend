@@ -63,3 +63,4 @@ class LanguageRepository(BaseRepository[Language, LanguageDomain]):
         stmt = delete(self.model).where(self.model.id.in_(ids))
         res = await self.session.execute(stmt)
         return int(res.rowcount or 0)
+

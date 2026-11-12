@@ -77,3 +77,4 @@ class NavActionCountsDomain:
             "/admin/bookings": self.bookings,
             "/admin/customers/job-requests": self.job_requests,
         }
+

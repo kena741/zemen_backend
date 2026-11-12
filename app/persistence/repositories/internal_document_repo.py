@@ -33,3 +33,4 @@ class AdminInternalDocumentRepository(BaseRepository[AdminDocument, AdminInterna
         stmt = select(self.model).order_by(self.model.created_at.desc())
         res = await self.session.execute(stmt)
         return [self.to_domain(d) for d in res.scalars().all()]
+

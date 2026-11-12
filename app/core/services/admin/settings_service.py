@@ -271,3 +271,4 @@ class SettingsAdminService:
             summary=f"Deleted coupon {coupon_id}",
             ctx=ctx,
         )
+

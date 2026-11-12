@@ -66,3 +66,4 @@ class WalletTransactionRepository(BaseRepository[WalletTransaction, EnrichedWall
                 )
             )
         return items
+

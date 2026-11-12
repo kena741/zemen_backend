@@ -32,3 +32,4 @@ class JobRequestListResponse(BaseModel):
 class DeleteJobRequestResponse(BaseModel):
     ok: bool = True
     deleted: int = 1
+

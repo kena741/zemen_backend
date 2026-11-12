@@ -65,3 +65,4 @@ class NavActionCountsRepository:
             bookings=bookings_cnt,
             job_requests=job_requests_cnt,
         )
+

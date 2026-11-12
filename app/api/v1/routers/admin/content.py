@@ -486,3 +486,4 @@ async def delete_tracker_row(
     service = _get_content_service(db)
     await service.delete_tracker_row(row_id=row_id, ctx=ctx)
     return {"ok": True}
+

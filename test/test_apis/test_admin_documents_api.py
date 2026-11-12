@@ -187,3 +187,4 @@ def test_delete_internal_document_endpoint(api_client, super_admin_context):
 
         assert res.status_code == 200
         assert res.json() == {"ok": True}
+

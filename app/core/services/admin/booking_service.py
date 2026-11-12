@@ -460,3 +460,4 @@ class BookingAdminService:
 
     async def count_badge(self) -> int:
         return await self.booking_repo.count_pending_badge()
+

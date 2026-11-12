@@ -68,3 +68,4 @@ class CouponRepository(BaseRepository[Coupon, CouponDomain]):
         stmt = delete(self.model).where(self.model.id == coupon_id)
         res = await self.session.execute(stmt)
         return bool(res.rowcount and res.rowcount > 0)
+

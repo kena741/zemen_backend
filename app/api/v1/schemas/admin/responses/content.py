@@ -110,3 +110,4 @@ class MarketingTrackerWorkspaceResponse(BaseModel):
     active_sheet_id: UUID | None = Field(default=None, serialization_alias="activeSheetId")
     columns: list[MarketingColumnResponseItem]
     rows: list[MarketingRowResponseItem]
+

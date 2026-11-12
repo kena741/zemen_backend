@@ -51,3 +51,4 @@ async def test_job_request_repo_update_action():
     res = await repo.update_job_request("jr-12345", action="accept")
     assert res is not None
     assert len(session.executed_statements) == 1
+

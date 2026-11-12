@@ -117,3 +117,4 @@ class JobRequestRepository(BaseRepository[JobRequest, JobRequestDomain]):
         )
         res = await self.session.execute(stmt)
         return int(res.scalar_one() or 0)
+

@@ -53,3 +53,4 @@ class MobileAppConfigRepository(BaseRepository[MobileAppConfig, MobileAppConfigD
         res = await self.session.execute(stmt)
         row = res.scalar_one_or_none()
         return self.to_domain(row) if row else None
+

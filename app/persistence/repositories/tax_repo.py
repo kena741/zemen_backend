@@ -33,3 +33,4 @@ class CountryTaxRepository(BaseRepository[CountryTax, CountryTaxDomain]):
         stmt = select(self.model).order_by(self.model.created_at.desc())
         res = await self.session.execute(stmt)
         return [self.to_domain(t) for t in res.scalars().all()]
+

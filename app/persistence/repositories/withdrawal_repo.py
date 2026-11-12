@@ -166,3 +166,4 @@ class WithdrawalRepository(BaseRepository[WithdrawalHistory, WithdrawalDomain]):
         stmt = select(func.count(self.model.id)).where(self.model.payment_status.ilike("pending"))
         res = await self.session.execute(stmt)
         return int(res.scalar_one() or 0)
+

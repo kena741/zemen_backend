@@ -153,3 +153,4 @@ async def test_nav_action_counts_repo():
     assert counts.job_requests == 1
     assert counts.total == 5
     assert counts.to_dict()["/admin/verify-documents"] == 1
+

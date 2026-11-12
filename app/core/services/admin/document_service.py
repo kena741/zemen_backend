@@ -153,3 +153,4 @@ class DocumentAdminService:
             summary=f"Deleted internal document {doc_id}",
             ctx=ctx,
         )
+

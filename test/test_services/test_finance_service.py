@@ -270,3 +270,4 @@ async def test_country_tax_crud(finance_service, mock_context):
 
     await service.delete_tax(tax_id=1, ctx=mock_context)
     t_repo.delete.assert_called_once_with(1)
+

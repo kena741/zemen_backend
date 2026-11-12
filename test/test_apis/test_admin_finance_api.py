@@ -279,3 +279,4 @@ def test_get_chapa_balance_endpoint(api_client, super_admin_context):
     assert data["currency"] == "ETB"
     assert "availableBalance" in data
     assert "ledgerBalance" in data
+

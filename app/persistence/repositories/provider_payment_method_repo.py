@@ -126,3 +126,4 @@ class ProviderPaymentMethodRepository(BaseRepository[ProviderPaymentMethod, Prov
         self.session.add(new_method)
         await self.session.flush()
         return self.to_domain(new_method)
+

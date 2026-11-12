@@ -220,3 +220,4 @@ async def delete_internal_document(
     service = _get_document_service(db)
     await service.delete_internal_document(doc_id=document_id, ctx=ctx)
     return {"ok": True}
+

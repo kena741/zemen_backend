@@ -228,3 +228,4 @@ class MarketingTrackerRepository:
             delete(MarketingTrackerRow).where(MarketingTrackerRow.id == row_id)
         )
         return bool(del_r.rowcount and del_r.rowcount > 0)
+

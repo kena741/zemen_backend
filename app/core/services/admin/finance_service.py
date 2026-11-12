@@ -498,3 +498,4 @@ class FinanceAdminService:
 
     async def count_badge(self) -> int:
         return await self.withdrawal_repo.count_pending_badge()
+

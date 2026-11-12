@@ -83,3 +83,4 @@ class CouponUpdateRequest(BaseModel):
     is_private: bool | None = Field(default=None, alias="isPrivate")
     is_fix: bool | None = Field(default=None, alias="isFix")
     expired_at: datetime | None = Field(default=None, alias="expiredAt")
+

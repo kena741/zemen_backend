@@ -92,3 +92,4 @@ class JobRequestAdminService:
 
     async def count_pending_badge(self) -> int:
         return await self.job_repo.count_pending_badge()
+

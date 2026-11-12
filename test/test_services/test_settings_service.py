@@ -239,3 +239,4 @@ async def test_nav_action_counts():
     assert counts.payout_requests == 2
     assert counts.total == 22
     assert counts.to_dict()["/admin/finance/payout-request"] == 2
+

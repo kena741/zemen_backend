@@ -120,3 +120,4 @@ class ChapaBalanceResponse(BaseModel):
     currency: str = "ETB"
     available_balance: float = Field(default=0.0, serialization_alias="availableBalance")
     ledger_balance: float = Field(default=0.0, serialization_alias="ledgerBalance")
+

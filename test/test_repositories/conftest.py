@@ -26,13 +26,18 @@ class RepoMockSession:
 
     async def execute(self, stmt: Any) -> Any:
         self.executed_statements.append(stmt)
+        stmt_str = str(stmt).lower()
+        if "count(" in stmt_str:
+            self._current_scalar = 1
+        else:
+            self._current_scalar = self.scalar_value
         return self
 
     def scalar_one_or_none(self) -> Any:
-        return self.scalar_value
+        return getattr(self, "_current_scalar", self.scalar_value)
 
     def scalar_one(self) -> Any:
-        return self.scalar_value
+        return getattr(self, "_current_scalar", self.scalar_value)
 
     def scalars(self) -> Any:
         return self

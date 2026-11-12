@@ -67,3 +67,4 @@ def test_resolve_booker_customer(api_client, super_admin_context):
     assert res.status_code == 200
     assert res.json()["firstName"] == "Admin"
     assert res.json()["email"] == "admin-booker@lolelink.com"
+

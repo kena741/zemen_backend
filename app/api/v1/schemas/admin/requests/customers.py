@@ -33,3 +33,4 @@ class SendCustomerPushRequest(BaseModel):
     title: str
     body: str
     route: str | None = None
+

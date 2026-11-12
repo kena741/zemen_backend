@@ -58,3 +58,4 @@ class ApproveByProviderRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     provider_id: UUID = Field(alias="providerId")
+

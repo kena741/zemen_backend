@@ -21,3 +21,4 @@ class UploadVerificationDocumentRequest(BaseModel):
 
     document_id: UUID = Field(alias="documentId")
     document_image: str = Field(alias="documentImage")
+

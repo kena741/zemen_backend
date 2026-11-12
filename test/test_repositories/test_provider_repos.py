@@ -128,3 +128,4 @@ async def test_verify_document_repo_mapping():
     assert domain.document_name == "Trade License"
     assert domain.sub_category_name == "Plumbing"
     assert domain.is_verify is None
+

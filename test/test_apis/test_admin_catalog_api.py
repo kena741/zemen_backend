@@ -76,3 +76,4 @@ def test_decide_featured_status(api_client, super_admin_context):
     )
     assert res.status_code == 200
     assert res.json()["count"] == 1
+

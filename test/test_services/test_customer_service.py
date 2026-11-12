@@ -118,3 +118,4 @@ async def test_convert_to_provider_success(customer_service, mock_context):
     prov = await service.convert_to_provider(cust_id, ctx=mock_context)
     assert prov.full_name == "Marta Tadesse"
     prov_repo.create.assert_awaited_once()
+

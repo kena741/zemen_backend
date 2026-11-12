@@ -139,3 +139,4 @@ def test_nav_action_counts(api_client, super_admin_context):
     res = client.get("/api/v1/admin/nav-action-counts")
     assert res.status_code == 200
     assert res.json()["counts"]["/admin/verify-documents"] == 5
+

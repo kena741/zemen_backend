@@ -83,3 +83,4 @@ class ServiceListResponse(BaseModel):
 
 class ServiceSingleResponse(BaseModel):
     data: ServiceItemResponse
+

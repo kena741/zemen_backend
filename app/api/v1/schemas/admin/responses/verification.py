@@ -33,3 +33,4 @@ class VerifyDocumentSingleResponse(BaseModel):
 
 class NavPendingCountResponse(BaseModel):
     counts: dict[str, int]
+

@@ -116,3 +116,4 @@ class ProviderHireAdminService:
         )
 
         return {"id": str(booking_id), "followUp": admin_note or ""}
+

@@ -216,3 +216,4 @@ class PushReadinessResponse(BaseModel):
     sms_ready: bool = Field(serialization_alias="smsReady")
     sms_recipient: str | None = Field(default=None, serialization_alias="smsRecipient")
     debug: dict[str, Any] = Field(default_factory=dict)
+

@@ -56,3 +56,4 @@ class ServiceDomain:
     provider_name: str | None = None
     provider_email: str | None = None
     created_at: datetime | None = None
+

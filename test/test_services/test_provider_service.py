@@ -151,3 +151,4 @@ async def test_verify_service_approve_merges_subcategories(mock_context):
     call_args = prov_repo.update.call_args[0]
     assert call_args[0] == prov_id
     assert subcat_id in call_args[1]["verified_subcategory_ids"]
+

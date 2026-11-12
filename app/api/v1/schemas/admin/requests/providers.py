@@ -124,3 +124,4 @@ class ReconcileActivationPaymentRequest(BaseModel):
     tx_ref: str | None = Field(default=None, alias="txRef")
     fee_amount: float | None = Field(default=None, alias="feeAmount")
     note: str | None = None
+

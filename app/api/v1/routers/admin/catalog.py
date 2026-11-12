@@ -318,3 +318,4 @@ async def get_services_badge_count(
     service = _get_catalog_service(db)
     count = await service.count_services_badge()
     return {"count": count}
+

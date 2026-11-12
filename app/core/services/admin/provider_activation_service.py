@@ -178,3 +178,4 @@ class ProviderActivationAdminService:
             "tx_ref": ref,
             "activation_paid_at": now.isoformat(),
         }
+

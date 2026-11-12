@@ -108,3 +108,4 @@ async def test_decide_feature_request_success(catalog_service, mock_context):
         feature=True,
         feature_status="accepted",
     )
+

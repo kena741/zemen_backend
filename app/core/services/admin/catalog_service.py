@@ -284,3 +284,4 @@ class CatalogAdminService:
 
     async def count_services_badge(self) -> int:
         return await self.service_repo.count_unapproved_and_featured_pending()
+

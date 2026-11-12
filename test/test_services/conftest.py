@@ -29,6 +29,18 @@ class ServiceMockSession:
         self.statements.append(stmt)
         return self
 
+    def first(self) -> Any:
+        return None
+
+    def scalar_one_or_none(self) -> Any:
+        return None
+
+    def scalars(self) -> Any:
+        return self
+
+    def all(self) -> list[Any]:
+        return []
+
 
 @pytest.fixture
 def mock_audit_service():

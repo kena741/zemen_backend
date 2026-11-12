@@ -41,3 +41,4 @@ async def test_customer_repo_to_domain():
     assert domain.phone == "+251911445566"
     assert domain.wallet_amount == 1200.50
     assert domain.admin_note == "VIP customer"
+

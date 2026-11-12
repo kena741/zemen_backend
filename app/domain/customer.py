@@ -58,3 +58,4 @@ class CustomerJobRequestItemDomain:
     status: str | None = None
     accepted: bool | None = None
     is_paid: bool | None = None
+

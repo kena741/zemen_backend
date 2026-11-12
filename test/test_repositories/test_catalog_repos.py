@@ -86,3 +86,4 @@ async def test_service_repo_to_domain():
     assert domain.price == 450.00
     assert domain.approved is True
     assert domain.provider_name == "Abebe Bikila"
+

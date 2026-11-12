@@ -70,3 +70,4 @@ class CustomerJobRequestItemResponse(BaseModel):
 
 class CustomerJobRequestListResponse(BaseModel):
     data: list[CustomerJobRequestItemResponse]
+

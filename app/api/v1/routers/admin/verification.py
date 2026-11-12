@@ -164,18 +164,3 @@ async def upload_verification_document(
         ctx=ctx,
     )
     return VerifyDocumentSingleResponse(data=VerifyDocumentItemResponse.model_validate(doc))
-
-
-@router.get(
-    "/nav-action-counts",
-    response_model=NavPendingCountResponse,
-    operation_id="admin_verification_nav_counts",
-    summary="Get pending verification action counts for sidebar",
-)
-async def get_nav_action_counts(
-    ctx: CanVerifyProviders,
-    db: Db,
-) -> NavPendingCountResponse:
-    service = _get_verification_service(db)
-    pending_count = await service.count_pending()
-    return NavPendingCountResponse(counts={"/admin/verify-documents": pending_count})

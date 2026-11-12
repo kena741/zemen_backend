@@ -2,8 +2,6 @@ from fastapi import APIRouter
 
 from app.api.v1.routers import (
     admin,
-    admin_catalog,
-    admin_reads,
     auth,
     bookings,
     catalog,
@@ -37,8 +35,6 @@ api_v1_router.include_router(chats.router)
 api_v1_router.include_router(wallet.router)
 api_v1_router.include_router(payments.router)
 api_v1_router.include_router(admin.router)
-api_v1_router.include_router(admin_catalog.router)
-api_v1_router.include_router(admin_reads.router)
 
 
 @api_v1_router.get(

@@ -32,6 +32,7 @@ class Customer(Base):
     default_address: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
     customer_addresses: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
     signup_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

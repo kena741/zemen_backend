@@ -27,8 +27,10 @@ services:
       - path: .env
         required: false
     environment:
-      - ENVIRONMENT=development
+      - ENVIRONMENT=${ENVIRONMENT:-development}
       - DEVELOPMENT_DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/zemen_db
+      - STAGING_DATABASE_URL=${STAGING_DATABASE_URL:-}
+      - PRODUCTION_DATABASE_URL=${PRODUCTION_DATABASE_URL:-}
       - PYTHONUNBUFFERED=1
     volumes:
       - .:/opt/app
@@ -48,8 +50,10 @@ services:
       - path: .env
         required: false
     environment:
-      - ENVIRONMENT=development
+      - ENVIRONMENT=${ENVIRONMENT:-development}
       - DEVELOPMENT_DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/zemen_db
+      - STAGING_DATABASE_URL=${STAGING_DATABASE_URL:-}
+      - PRODUCTION_DATABASE_URL=${PRODUCTION_DATABASE_URL:-}
       - PYTHONUNBUFFERED=1
     volumes:
       - .:/opt/app

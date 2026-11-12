@@ -365,6 +365,10 @@
     "totalAmount": {
       "null": true,
       "udt": "numeric"
+    },
+    "admin_note": {
+      "null": true,
+      "udt": "text"
     }
   },
   "category": {

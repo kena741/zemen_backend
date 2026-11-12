@@ -119,3 +119,38 @@ def send_multicast_fcm_notification(
         logger.error("Failed to send multicast FCM notification: %s", exc)
         return 0
 
+
+class FCMService:
+    """Wrapper class for FCM push notifications supporting test injection."""
+
+    async def send_to_token(
+        self,
+        token: str,
+        title: str,
+        body: str,
+        data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        str_data = {str(k): str(v) for k, v in (data or {}).items()}
+        msg_id = send_fcm_notification(token=token, title=title, body=body, data=str_data)
+        return {"sent": msg_id is not None, "message_id": msg_id}
+
+    async def send_multicast(
+        self,
+        tokens: list[str],
+        title: str,
+        body: str,
+        data: dict[str, Any] | None = None,
+    ) -> int:
+        str_data = {str(k): str(v) for k, v in (data or {}).items()}
+        return send_multicast_fcm_notification(tokens=tokens, title=title, body=body, data=str_data)
+
+
+_fcm_service_instance: FCMService | None = None
+
+
+def get_fcm_service() -> FCMService:
+    global _fcm_service_instance
+    if _fcm_service_instance is None:
+        _fcm_service_instance = FCMService()
+    return _fcm_service_instance
+

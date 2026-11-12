@@ -76,6 +76,7 @@ class Provider(Base):
     company_license_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     company_rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     service_tier_tx_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column("createdAt", DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column("updateAt", DateTime(timezone=True), nullable=False)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

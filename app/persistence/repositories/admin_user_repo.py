@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import delete, func, select, update
 
@@ -99,11 +100,15 @@ class AdminUserRepository(BaseRepository[Admin, AdminUserDomain]):
         email: str | None = None,
     ) -> AdminUserDomain:
         """Create a new Admin row linked to an existing user."""
+        now = datetime.now(timezone.utc)
         admin = Admin(
+            id=uuid4(),
             user_id=user_id,
             full_name=full_name,
             role=role,
             is_active=is_active,
+            created_at=now,
+            updated_at=now,
         )
         self.session.add(admin)
         await self.session.flush()

@@ -52,9 +52,17 @@ class TelegramMessagePayload(APIModel):
     text: str | None = None
 
 
+class CallbackQueryPayload(APIModel):
+    id: str
+    from_user: TelegramUserPayload = Field(..., alias="from")
+    message: TelegramMessagePayload | None = None
+    data: str | None = None
+
+
 class TelegramWebhookUpdate(APIModel):
     update_id: int
     message: TelegramMessagePayload | None = None
+    callback_query: CallbackQueryPayload | None = None
     chat_member: ChatMemberUpdatedPayload | None = None
     my_chat_member: ChatMemberUpdatedPayload | None = None
 

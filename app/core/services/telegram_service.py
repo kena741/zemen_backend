@@ -1,4 +1,7 @@
+import asyncio
+import csv
 from datetime import datetime, timezone
+import io
 import logging
 from typing import Any
 
@@ -8,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.schemas.telegram import (
+    CallbackQueryPayload,
     ChatMemberUpdatedPayload,
     TelegramChatOut,
     TelegramLeaderboardEntry,
@@ -52,7 +56,7 @@ async def register_webhook(
             ok=False, description="TELEGRAM_WEBHOOK_URL is not configured"
         )
 
-    updates = allowed_updates or ["chat_member", "my_chat_member", "message"]
+    updates = allowed_updates or ["chat_member", "my_chat_member", "message", "callback_query"]
 
     url = f"https://api.telegram.org/bot{token}/setWebhook"
     payload: dict[str, Any] = {
@@ -341,20 +345,362 @@ async def process_chat_member_updated(
     }
 
 
-async def send_message(chat_id: int, text: str, parse_mode: str = "HTML") -> None:
+async def send_message(
+    chat_id: int,
+    text: str,
+    parse_mode: str = "HTML",
+    reply_markup: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     """Helper to send a message to a chat using Telegram Bot API."""
     token = settings.TELEGRAM_BOT_TOKEN
     if not token:
-        return
+        return None
     url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload: dict[str, Any] = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(
-                url,
-                json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode},
-            )
+            resp = await client.post(url, json=payload)
+            return resp.json()
     except Exception as exc:
         logger.warning("Failed to send Telegram message to chat %d: %s", chat_id, exc)
+        return None
+
+
+async def edit_message_text(
+    chat_id: int,
+    message_id: int,
+    text: str,
+    parse_mode: str = "HTML",
+    reply_markup: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Edits an existing Telegram message in-place for seamless menu navigation."""
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return None
+    url = f"https://api.telegram.org/bot{token}/editMessageText"
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "parse_mode": parse_mode,
+    }
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(url, json=payload)
+            return resp.json()
+    except Exception as exc:
+        logger.warning("Failed to edit Telegram message %d in chat %d: %s", message_id, chat_id, exc)
+        return None
+
+
+async def answer_callback_query(
+    callback_query_id: str,
+    text: str | None = None,
+    show_alert: bool = False,
+) -> None:
+    """Acknowledges an inline button callback query to dismiss the Telegram loading indicator."""
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return
+    url = f"https://api.telegram.org/bot{token}/answerCallbackQuery"
+    payload: dict[str, Any] = {"callback_query_id": callback_query_id}
+    if text:
+        payload["text"] = text
+        payload["show_alert"] = show_alert
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(url, json=payload)
+    except Exception as exc:
+        logger.warning("Failed to answer callback query %s: %s", callback_query_id, exc)
+
+
+async def send_document(
+    chat_id: int,
+    filename: str,
+    content_bytes: bytes,
+    caption: str | None = None,
+) -> dict[str, Any] | None:
+    """Sends a downloadable file (e.g. CSV report) directly to a Telegram chat."""
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return None
+    url = f"https://api.telegram.org/bot{token}/sendDocument"
+    files = {"document": (filename, content_bytes, "text/csv")}
+    data = {"chat_id": str(chat_id)}
+    if caption:
+        data["caption"] = caption
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, data=data, files=files)
+            return resp.json()
+    except Exception as exc:
+        logger.warning("Failed to send Telegram document to chat %d: %s", chat_id, exc)
+        return None
+
+
+async def is_chat_admin(chat_id: int, user_id: int) -> bool:
+    """Verifies with Telegram Bot API whether a user is an administrator or creator in a chat."""
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return False
+    url = f"https://api.telegram.org/bot{token}/getChatMember"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url, params={"chat_id": chat_id, "user_id": user_id})
+            data = resp.json()
+            if not data.get("ok"):
+                return False
+            status = data.get("result", {}).get("status")
+            return status in ("creator", "administrator")
+    except Exception as exc:
+        logger.warning("Error verifying admin status for user %d in chat %d: %s", user_id, chat_id, exc)
+        return False
+
+
+async def get_admin_chats(db: AsyncSession, user_id: int) -> list[TelegramChat]:
+    """Finds all tracked chats in which the user holds administrative permissions."""
+    res = await db.execute(select(TelegramChat).where(TelegramChat.is_active == True))  # noqa: E712
+    all_chats = res.scalars().all()
+    if not all_chats:
+        return []
+
+    async def _check(c: TelegramChat) -> TelegramChat | None:
+        if await is_chat_admin(chat_id=c.chat_id, user_id=user_id):
+            return c
+        return None
+
+    results = await asyncio.gather(*[_check(c) for c in all_chats], return_exceptions=True)
+    return [c for c in results if isinstance(c, TelegramChat)]
+
+
+async def generate_chat_invites_csv(db: AsyncSession, chat_id: int) -> str:
+    """Generates a CSV report of all inviters and their invite totals in a chat."""
+    query = (
+        select(
+            TelegramInviteStat.user_id,
+            TelegramUser.username,
+            TelegramUser.first_name,
+            TelegramUser.last_name,
+            TelegramInviteStat.total_invites,
+            TelegramInviteStat.updated_at,
+        )
+        .join(TelegramUser, TelegramUser.user_id == TelegramInviteStat.user_id)
+        .where(TelegramInviteStat.chat_id == chat_id)
+        .order_by(TelegramInviteStat.total_invites.desc())
+    )
+    res = await db.execute(query)
+    rows = res.all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Rank",
+        "Telegram User ID",
+        "Username",
+        "First Name",
+        "Last Name",
+        "Total Invites",
+        "Last Invite Timestamp (UTC)",
+    ])
+    for rank, row in enumerate(rows, start=1):
+        writer.writerow([
+            rank,
+            row.user_id,
+            f"@{row.username}" if row.username else "",
+            row.first_name,
+            row.last_name or "",
+            row.total_invites,
+            row.updated_at.strftime("%Y-%m-%d %H:%M:%S") if row.updated_at else "",
+        ])
+    return output.getvalue()
+
+
+def build_main_menu(admin_chats: list[TelegramChat], user_first_name: str = "Admin") -> tuple[str, dict[str, Any]]:
+    """Builds the primary private-message admin menu with list of authorized groups."""
+    text = (
+        f"🛡️ <b>Zemen Bot — Admin Control Panel</b>\n\n"
+        f"Welcome, {user_first_name}! You are recognized as an administrator in the following group(s):\n\n"
+        f"Select a group below to view invite counts, leaderboards, or export data:"
+    )
+    keyboard = []
+    for chat in admin_chats:
+        title = chat.title or f"Chat {chat.chat_id}"
+        keyboard.append([{"text": f"👥 {title}", "callback_data": f"chat:{chat.chat_id}"}])
+
+    keyboard.append([
+        {"text": "🔄 Refresh", "callback_data": "menu:main"},
+        {"text": "ℹ️ About", "callback_data": "menu:about"},
+    ])
+    return text, {"inline_keyboard": keyboard}
+
+
+async def build_chat_detail_menu(db: AsyncSession, chat_id: int) -> tuple[str, dict[str, Any]]:
+    """Builds the detailed analytics view for a specific chat."""
+    chat = await get_chat(db, chat_id=chat_id)
+    if not chat:
+        return "❌ Chat not found in database.", {
+            "inline_keyboard": [[{"text": "« Back to Main Menu", "callback_data": "menu:main"}]]
+        }
+
+    status_icon = "Active ✅" if chat.is_active else "Inactive ❌"
+    text = (
+        f"📊 <b>Group Overview: {chat.title or 'Telegram Chat'}</b>\n\n"
+        f"• <b>Chat ID:</b> <code>{chat.chat_id}</code>\n"
+        f"• <b>Type:</b> <i>{chat.type}</i>\n"
+        f"• <b>Tracked Members:</b> <b>{chat.total_members}</b>\n"
+        f"• <b>Verified Invites:</b> <b>{chat.total_invites}</b>\n"
+        f"• <b>Status:</b> {status_icon}\n\n"
+        f"Select an action:"
+    )
+    keyboard = [
+        [{"text": "🏆 Top Inviters (Leaderboard)", "callback_data": f"lb:{chat_id}"}],
+        [{"text": "🔗 Invite Links Performance", "callback_data": f"links:{chat_id}"}],
+        [{"text": "📥 Export Report (CSV)", "callback_data": f"export:{chat_id}"}],
+        [{"text": "« Back to Groups", "callback_data": "menu:main"}],
+    ]
+    return text, {"inline_keyboard": keyboard}
+
+
+async def build_leaderboard_menu(db: AsyncSession, chat_id: int) -> tuple[str, dict[str, Any]]:
+    """Builds the top inviters leaderboard view for a specific chat."""
+    leaderboard = await get_chat_leaderboard(db, chat_id=chat_id, limit=10)
+    text_lines = [f"🏆 <b>Top Inviters Leaderboard</b>\n<code>Chat ID: {chat_id}</code>\n"]
+    if not leaderboard:
+        text_lines.append("<i>No verified invites recorded in this chat yet.</i>")
+    else:
+        medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+        for idx, entry in enumerate(leaderboard, start=1):
+            icon = medals.get(idx, f"<b>{idx}.</b>")
+            user_display = f"@{entry.username}" if entry.username else entry.first_name
+            text_lines.append(f"{icon} {user_display} — <b>{entry.total_invites}</b> invites")
+
+    keyboard = [
+        [{"text": "📥 Export Full CSV", "callback_data": f"export:{chat_id}"}],
+        [{"text": "« Back to Group", "callback_data": f"chat:{chat_id}"}],
+        [{"text": "« Main Menu", "callback_data": "menu:main"}],
+    ]
+    return "\n".join(text_lines), {"inline_keyboard": keyboard}
+
+
+async def build_links_menu(db: AsyncSession, chat_id: int) -> tuple[str, dict[str, Any]]:
+    """Builds the invite links performance breakdown view."""
+    query = (
+        select(TelegramInviteLink)
+        .where(TelegramInviteLink.chat_id == chat_id)
+        .order_by(TelegramInviteLink.usage_count.desc())
+        .limit(10)
+    )
+    res = await db.execute(query)
+    links = res.scalars().all()
+
+    text_lines = [f"🔗 <b>Invite Links Performance</b>\n<code>Chat ID: {chat_id}</code>\n"]
+    if not links:
+        text_lines.append("<i>No tracked invite links recorded yet for this chat.</i>")
+    else:
+        for idx, link in enumerate(links, start=1):
+            name_label = f" ({link.name})" if link.name else ""
+            primary_tag = " ⭐ Primary" if link.is_primary else ""
+            text_lines.append(
+                f"<b>{idx}.</b> <code>{link.invite_link}</code>{name_label}{primary_tag}\n"
+                f"   ↳ <b>{link.usage_count}</b> verified joins"
+            )
+
+    keyboard = [
+        [{"text": "« Back to Group", "callback_data": f"chat:{chat_id}"}],
+        [{"text": "« Main Menu", "callback_data": "menu:main"}],
+    ]
+    return "\n".join(text_lines), {"inline_keyboard": keyboard}
+
+
+async def handle_callback_query(
+    db: AsyncSession,
+    callback_query: CallbackQueryPayload,
+) -> dict[str, Any]:
+    """Handles button clicks from inline keyboards in private messages."""
+    if not callback_query.message:
+        await answer_callback_query(callback_query.id, "Session expired.")
+        return {"handled": False}
+
+    dm_chat_id = callback_query.message.chat.id
+    message_id = callback_query.message.message_id
+    user_id = callback_query.from_user.id
+    data = callback_query.data or ""
+
+    if data == "menu:main":
+        admin_chats = await get_admin_chats(db, user_id=user_id)
+        if not admin_chats:
+            await edit_message_text(
+                dm_chat_id,
+                message_id,
+                "⛔ <b>Access Restricted</b>\n\nYou are not recognized as an administrator in any tracked groups.",
+            )
+        else:
+            text, markup = build_main_menu(admin_chats, user_first_name=callback_query.from_user.first_name)
+            await edit_message_text(dm_chat_id, message_id, text, reply_markup=markup)
+        await answer_callback_query(callback_query.id)
+        return {"handled": True, "action": "menu_main"}
+
+    if data == "menu:about":
+        about_text = (
+            "ℹ️ <b>About Zemen Invite Tracker</b>\n\n"
+            "• Version: <code>1.0.0</code>\n"
+            "• Automatically monitors group joins via direct adds and invite links.\n"
+            "• Deduplicates rejoining members and calculates accurate invite statistics.\n"
+            "• Accessible exclusively to verified group administrators."
+        )
+        markup = {"inline_keyboard": [[{"text": "« Back to Main Menu", "callback_data": "menu:main"}]]}
+        await edit_message_text(dm_chat_id, message_id, about_text, reply_markup=markup)
+        await answer_callback_query(callback_query.id)
+        return {"handled": True, "action": "menu_about"}
+
+    if data.startswith("chat:"):
+        target_chat_id = int(data.split(":")[1])
+        if not await is_chat_admin(target_chat_id, user_id):
+            await answer_callback_query(callback_query.id, "⛔ You are not an admin of this group.", show_alert=True)
+            return {"handled": False, "error": "unauthorized"}
+        text, markup = await build_chat_detail_menu(db, target_chat_id)
+        await edit_message_text(dm_chat_id, message_id, text, reply_markup=markup)
+        await answer_callback_query(callback_query.id)
+        return {"handled": True, "action": "chat_detail", "chat_id": target_chat_id}
+
+    if data.startswith("lb:"):
+        target_chat_id = int(data.split(":")[1])
+        if not await is_chat_admin(target_chat_id, user_id):
+            await answer_callback_query(callback_query.id, "⛔ You are not an admin of this group.", show_alert=True)
+            return {"handled": False, "error": "unauthorized"}
+        text, markup = await build_leaderboard_menu(db, target_chat_id)
+        await edit_message_text(dm_chat_id, message_id, text, reply_markup=markup)
+        await answer_callback_query(callback_query.id)
+        return {"handled": True, "action": "leaderboard", "chat_id": target_chat_id}
+
+    if data.startswith("links:"):
+        target_chat_id = int(data.split(":")[1])
+        if not await is_chat_admin(target_chat_id, user_id):
+            await answer_callback_query(callback_query.id, "⛔ You are not an admin of this group.", show_alert=True)
+            return {"handled": False, "error": "unauthorized"}
+        text, markup = await build_links_menu(db, target_chat_id)
+        await edit_message_text(dm_chat_id, message_id, text, reply_markup=markup)
+        await answer_callback_query(callback_query.id)
+        return {"handled": True, "action": "links", "chat_id": target_chat_id}
+
+    if data.startswith("export:"):
+        target_chat_id = int(data.split(":")[1])
+        if not await is_chat_admin(target_chat_id, user_id):
+            await answer_callback_query(callback_query.id, "⛔ You are not an admin of this group.", show_alert=True)
+            return {"handled": False, "error": "unauthorized"}
+        await answer_callback_query(callback_query.id, "Generating CSV report...")
+        csv_data = await generate_chat_invites_csv(db, target_chat_id)
+        filename = f"invites_{abs(target_chat_id)}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+        caption = f"📊 <b>Invite Report</b>\n• Chat ID: <code>{target_chat_id}</code>\n• Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        await send_document(dm_chat_id, filename, csv_data.encode("utf-8"), caption=caption)
+        return {"handled": True, "action": "export", "chat_id": target_chat_id}
+
+    await answer_callback_query(callback_query.id)
+    return {"handled": False, "type": "unknown_callback"}
 
 
 async def process_telegram_webhook_update(
@@ -364,6 +710,9 @@ async def process_telegram_webhook_update(
     """Dispatches webhook update to appropriate handler."""
     if update_data.chat_member:
         return await process_chat_member_updated(db, update_data.chat_member)
+
+    if update_data.callback_query:
+        return await handle_callback_query(db, update_data.callback_query)
 
     if update_data.my_chat_member:
         # Bot's own membership status changed (e.g., added/removed as admin)
@@ -443,18 +792,41 @@ async def process_telegram_webhook_update(
             )
             await db.execute(user_stmt)
 
-        # Responds with chat info if user sends /id, /chatid, or /start
+        # 1. Private Messages (Direct Message with Bot) -> Admin Dashboard
+        if msg.chat.type == "private" and msg.from_user:
+            admin_chats = await get_admin_chats(db, user_id=msg.from_user.id)
+            if not admin_chats:
+                restricted_msg = (
+                    f"⛔ <b>Access Restricted</b>\n\n"
+                    f"Hi {msg.from_user.first_name}! This bot is configured for group administrators only.\n\n"
+                    f"You are currently not recognized as an administrator in any of the tracked groups.\n\n"
+                    f"<i>Note: Make sure the bot is added to your group as an Administrator with 'Invite Users via Link' permission.</i>"
+                )
+                await send_message(chat_id=msg.chat.id, text=restricted_msg)
+            else:
+                text, markup = build_main_menu(admin_chats, user_first_name=msg.from_user.first_name)
+                await send_message(chat_id=msg.chat.id, text=text, reply_markup=markup)
+            return {"handled": True, "type": "private_message", "is_admin": bool(admin_chats)}
+
+        # 2. Group Messages -> Direct admins to DM to keep group chat clean
         raw_text = (msg.text or "").strip().lower()
-        if raw_text in ("/id", "/chatid", "/chat_id", "/start", "/info"):
+        if raw_text in ("/admin", "/dashboard", "/stats", "/menu", "/start"):
+            dm_notice = (
+                f"🔒 <b>Admin Control Panel</b>\n\n"
+                f"Hi {msg.from_user.first_name if msg.from_user else 'there'}! Administrative statistics, leaderboards, and reports are accessible exclusively in <b>Private Messages</b> to avoid group chat clutter.\n\n"
+                f"👉 Please open a direct message with me to view your dashboard."
+            )
+            await send_message(chat_id=msg.chat.id, text=dm_notice)
+        elif raw_text in ("/id", "/chatid", "/chat_id"):
             reply = (
                 f"📋 <b>Telegram Chat Info</b>\n\n"
                 f"• <b>Chat ID:</b> <code>{msg.chat.id}</code>\n"
-                f"• <b>Title:</b> {msg.chat.title or 'Private Chat'}\n"
+                f"• <b>Title:</b> {msg.chat.title or 'Group'}\n"
                 f"• <b>Type:</b> {msg.chat.type}"
             )
             await send_message(chat_id=msg.chat.id, text=reply)
 
-        return {"handled": True, "type": "message", "chat_id": msg.chat.id}
+        return {"handled": True, "type": "group_message", "chat_id": msg.chat.id}
 
     return {"handled": False, "type": "ignored"}
 

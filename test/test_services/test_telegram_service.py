@@ -148,3 +148,196 @@ async def test_process_chat_member_rejoin_is_idempotent():
     mock_db.add.assert_not_called()
     assert existing_member_mock.status == "member"
 
+
+@pytest.mark.asyncio
+async def test_private_dm_access_restricted_for_non_admin():
+    from app.api.v1.schemas.telegram import TelegramMessagePayload
+
+    update = TelegramWebhookUpdate(
+        update_id=2001,
+        message=TelegramMessagePayload(
+            message_id=1,
+            date=int(datetime.now(timezone.utc).timestamp()),
+            chat=TelegramChatPayload(id=999, type="private"),
+            from_user=TelegramUserPayload(id=999, first_name="RegularUser", is_bot=False),
+            text="/start",
+        ),
+    )
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+
+    with patch(
+        "app.core.services.telegram_service.get_admin_chats",
+        new=AsyncMock(return_value=[]),
+    ), patch(
+        "app.core.services.telegram_service.send_message",
+        new=AsyncMock(),
+    ) as mock_send:
+        res = await telegram_service.process_telegram_webhook_update(mock_db, update)
+        assert res["handled"] is True
+        assert res["is_admin"] is False
+        mock_send.assert_called_once()
+        _, kwargs = mock_send.call_args
+        assert "Access Restricted" in kwargs["text"]
+
+
+@pytest.mark.asyncio
+async def test_private_dm_access_granted_for_admin():
+    from app.api.v1.schemas.telegram import TelegramMessagePayload
+    from app.persistence.sqlalchemy.models.telegram import TelegramChat
+
+    admin_chat = TelegramChat(
+        chat_id=-1001234567890,
+        title="Admin Supergroup",
+        type="supergroup",
+        is_active=True,
+    )
+
+    update = TelegramWebhookUpdate(
+        update_id=2002,
+        message=TelegramMessagePayload(
+            message_id=2,
+            date=int(datetime.now(timezone.utc).timestamp()),
+            chat=TelegramChatPayload(id=111, type="private"),
+            from_user=TelegramUserPayload(id=111, first_name="AdminUser", is_bot=False),
+            text="/start",
+        ),
+    )
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+
+    with patch(
+        "app.core.services.telegram_service.get_admin_chats",
+        new=AsyncMock(return_value=[admin_chat]),
+    ), patch(
+        "app.core.services.telegram_service.send_message",
+        new=AsyncMock(),
+    ) as mock_send:
+        res = await telegram_service.process_telegram_webhook_update(mock_db, update)
+        assert res["handled"] is True
+        assert res["is_admin"] is True
+        mock_send.assert_called_once()
+        _, kwargs = mock_send.call_args
+        assert "Admin Control Panel" in kwargs["text"]
+        assert kwargs["reply_markup"] is not None
+
+
+@pytest.mark.asyncio
+async def test_group_message_directs_to_private_dm():
+    from app.api.v1.schemas.telegram import TelegramMessagePayload
+
+    update = TelegramWebhookUpdate(
+        update_id=2003,
+        message=TelegramMessagePayload(
+            message_id=3,
+            date=int(datetime.now(timezone.utc).timestamp()),
+            chat=TelegramChatPayload(id=-1001234567890, title="Public Group", type="supergroup"),
+            from_user=TelegramUserPayload(id=111, first_name="AdminUser", is_bot=False),
+            text="/admin",
+        ),
+    )
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+
+    with patch(
+        "app.core.services.telegram_service.send_message",
+        new=AsyncMock(),
+    ) as mock_send:
+        res = await telegram_service.process_telegram_webhook_update(mock_db, update)
+        assert res["handled"] is True
+        assert res["type"] == "group_message"
+        mock_send.assert_called_once()
+        _, kwargs = mock_send.call_args
+        assert "Private Messages" in kwargs["text"]
+
+
+@pytest.mark.asyncio
+async def test_callback_query_chat_detail():
+    from app.api.v1.schemas.telegram import CallbackQueryPayload, TelegramMessagePayload
+    from app.api.v1.schemas.telegram import TelegramChatOut
+
+    cb = CallbackQueryPayload(
+        id="query_123",
+        from_user=TelegramUserPayload(id=111, first_name="AdminUser", is_bot=False),
+        message=TelegramMessagePayload(
+            message_id=10,
+            date=int(datetime.now(timezone.utc).timestamp()),
+            chat=TelegramChatPayload(id=111, type="private"),
+        ),
+        data="chat:-1001234567890",
+    )
+    update = TelegramWebhookUpdate(update_id=3001, callback_query=cb)
+
+    mock_db = MagicMock()
+    mock_chat = TelegramChatOut(
+        chat_id=-1001234567890,
+        title="Admin Supergroup",
+        type="supergroup",
+        is_active=True,
+        total_members=50,
+        total_invites=25,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    with patch(
+        "app.core.services.telegram_service.is_chat_admin",
+        new=AsyncMock(return_value=True),
+    ), patch(
+        "app.core.services.telegram_service.get_chat",
+        new=AsyncMock(return_value=mock_chat),
+    ), patch(
+        "app.core.services.telegram_service.edit_message_text",
+        new=AsyncMock(),
+    ) as mock_edit, patch(
+        "app.core.services.telegram_service.answer_callback_query",
+        new=AsyncMock(),
+    ) as mock_answer:
+        res = await telegram_service.process_telegram_webhook_update(mock_db, update)
+        assert res["handled"] is True
+        assert res["action"] == "chat_detail"
+        mock_edit.assert_called_once()
+        mock_answer.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_callback_query_export_csv():
+    from app.api.v1.schemas.telegram import CallbackQueryPayload, TelegramMessagePayload
+
+    cb = CallbackQueryPayload(
+        id="query_124",
+        from_user=TelegramUserPayload(id=111, first_name="AdminUser", is_bot=False),
+        message=TelegramMessagePayload(
+            message_id=11,
+            date=int(datetime.now(timezone.utc).timestamp()),
+            chat=TelegramChatPayload(id=111, type="private"),
+        ),
+        data="export:-1001234567890",
+    )
+    update = TelegramWebhookUpdate(update_id=3002, callback_query=cb)
+
+    mock_db = MagicMock()
+
+    with patch(
+        "app.core.services.telegram_service.is_chat_admin",
+        new=AsyncMock(return_value=True),
+    ), patch(
+        "app.core.services.telegram_service.generate_chat_invites_csv",
+        new=AsyncMock(return_value="Rank,Telegram User ID,Username,First Name,Last Name,Total Invites,Last Invite Timestamp (UTC)\n1,111,@top,Top,User,10,2026-11-13 10:00:00\n"),
+    ), patch(
+        "app.core.services.telegram_service.send_document",
+        new=AsyncMock(),
+    ) as mock_doc, patch(
+        "app.core.services.telegram_service.answer_callback_query",
+        new=AsyncMock(),
+    ) as mock_answer:
+        res = await telegram_service.process_telegram_webhook_update(mock_db, update)
+        assert res["handled"] is True
+        assert res["action"] == "export"
+        mock_doc.assert_called_once()
+        mock_answer.assert_called_once()
+
+

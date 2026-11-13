@@ -60,6 +60,13 @@ from app.persistence.sqlalchemy.models.social import (
     Notifications,
     ReviewCustomer,
 )
+from app.persistence.sqlalchemy.models.telegram import (
+    TelegramChat,
+    TelegramChatMember,
+    TelegramInviteLink,
+    TelegramInviteStat,
+    TelegramUser,
+)
 from app.persistence.sqlalchemy.models.users import User, UserRefreshToken
 
 __all__ = [
@@ -115,6 +122,11 @@ __all__ = [
     "SubCategory",
     "SubCategoryDocument",
     "Subscription",
+    "TelegramChat",
+    "TelegramChatMember",
+    "TelegramInviteLink",
+    "TelegramInviteStat",
+    "TelegramUser",
     "User",
     "UserRefreshToken",
     "VerifyDocument",

@@ -14,6 +14,7 @@ from app.api.v1.routers import (
     payments,
     providers,
     reviews,
+    telegram,
     wallet,
 )
 from app.api.v1.schemas.common import HealthResponse
@@ -32,6 +33,7 @@ api_v1_router.include_router(offers.router)
 api_v1_router.include_router(reviews.router)
 api_v1_router.include_router(notifications.router)
 api_v1_router.include_router(chats.router)
+api_v1_router.include_router(telegram.router)
 api_v1_router.include_router(wallet.router)
 api_v1_router.include_router(payments.router)
 api_v1_router.include_router(admin.router)

@@ -105,6 +105,12 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_JSON: str | None = None
     FIREBASE_CREDENTIALS_FILE: str | None = None
 
+    # Telegram Bot Webhook Integration
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_WEBHOOK_SECRET: str = ""
+    TELEGRAM_WEBHOOK_URL: str = ""
+    TELEGRAM_AUTO_REGISTER_WEBHOOK: bool = True
+
     @field_validator(
         "DATABASE_POOL_SIZE",
         "DATABASE_POOL_OVERFLOW",

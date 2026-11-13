@@ -62,10 +62,13 @@ steps:
           --platform managed \
           --port 8080 \
           --quiet \
-          --set-env-vars "ENVIRONMENT=staging" \
+          --set-env-vars "ENVIRONMENT=staging,TELEGRAM_AUTO_REGISTER_WEBHOOK=true" \
           --set-secrets=STAGING_DATABASE_URL=STAGING_DATABASE_URL:latest \
           --set-secrets=CHAPA_SECRET_KEY=CHAPA_SECRET_KEY:latest \
-          --set-secrets=CORS_ALLOWED_ORIGINS=CORS_ALLOWED_ORIGINS:latest
+          --set-secrets=CORS_ALLOWED_ORIGINS=CORS_ALLOWED_ORIGINS:latest \
+          --set-secrets=TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest \
+          --set-secrets=TELEGRAM_WEBHOOK_SECRET=TELEGRAM_WEBHOOK_SECRET:latest \
+          --set-secrets=TELEGRAM_WEBHOOK_URL=TELEGRAM_WEBHOOK_URL:latest
     waitFor: ["build-and-push-image"]
 
 substitutions:

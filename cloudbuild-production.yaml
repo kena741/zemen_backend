@@ -66,9 +66,9 @@ steps:
           --set-secrets=PRODUCTION_DATABASE_URL=PRODUCTION_DATABASE_URL:latest \
           --set-secrets=CHAPA_SECRET_KEY=CHAPA_SECRET_KEY:latest \
           --set-secrets=CORS_ALLOWED_ORIGINS=CORS_ALLOWED_ORIGINS:latest \
-          --set-secrets=TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest \
-          --set-secrets=TELEGRAM_WEBHOOK_SECRET=TELEGRAM_WEBHOOK_SECRET:latest \
-          --set-secrets=TELEGRAM_WEBHOOK_URL=TELEGRAM_WEBHOOK_URL:latest
+          --set-secrets=PRODUCTION_TELEGRAM_BOT_TOKEN=PRODUCTION_TELEGRAM_BOT_TOKEN:latest \
+          --set-secrets=PRODUCTION_TELEGRAM_WEBHOOK_SECRET=PRODUCTION_TELEGRAM_WEBHOOK_SECRET:latest \
+          --set-secrets=PRODUCTION_TELEGRAM_WEBHOOK_URL=PRODUCTION_TELEGRAM_WEBHOOK_URL:latest
     waitFor: ["build-and-push-image"]
 
 substitutions:

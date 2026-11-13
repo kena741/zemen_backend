@@ -117,3 +117,38 @@ def test_pool_size_explicit_override():
     )
     assert s.DATABASE_POOL_SIZE == 25
     assert s.DATABASE_POOL_OVERFLOW == 12
+
+
+def test_telegram_config_environment_separation():
+    # Staging resolution
+    s_staging = Settings(
+        ENVIRONMENT="staging",
+        STAGING_DATABASE_URL="postgresql+asyncpg://stage:stage@localhost/staging",
+        STAGING_TELEGRAM_BOT_TOKEN="staging-bot-token",
+        STAGING_TELEGRAM_WEBHOOK_SECRET="staging-secret",
+        STAGING_TELEGRAM_WEBHOOK_URL="https://staging.example.com/webhook",
+    )
+    assert s_staging.TELEGRAM_BOT_TOKEN == "staging-bot-token"
+    assert s_staging.TELEGRAM_WEBHOOK_SECRET == "staging-secret"
+    assert s_staging.TELEGRAM_WEBHOOK_URL == "https://staging.example.com/webhook"
+
+    # Production resolution
+    s_prod = Settings(
+        ENVIRONMENT="production",
+        PRODUCTION_DATABASE_URL="postgresql+asyncpg://prod:prod@localhost/prod",
+        PRODUCTION_TELEGRAM_BOT_TOKEN="prod-bot-token",
+        PRODUCTION_TELEGRAM_WEBHOOK_SECRET="prod-secret",
+        PRODUCTION_TELEGRAM_WEBHOOK_URL="https://prod.example.com/webhook",
+    )
+    assert s_prod.TELEGRAM_BOT_TOKEN == "prod-bot-token"
+    assert s_prod.TELEGRAM_WEBHOOK_SECRET == "prod-secret"
+    assert s_prod.TELEGRAM_WEBHOOK_URL == "https://prod.example.com/webhook"
+
+    # Fallback to direct TELEGRAM_BOT_TOKEN if env-specific is unset
+    s_fallback = Settings(
+        ENVIRONMENT="staging",
+        STAGING_DATABASE_URL="postgresql+asyncpg://stage:stage@localhost/staging",
+        TELEGRAM_BOT_TOKEN="generic-bot-token",
+    )
+    assert s_fallback.TELEGRAM_BOT_TOKEN == "generic-bot-token"
+

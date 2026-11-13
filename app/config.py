@@ -105,7 +105,20 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_JSON: str | None = None
     FIREBASE_CREDENTIALS_FILE: str | None = None
 
-    # Telegram Bot Webhook Integration
+    # Telegram Bot Webhook Integration - Environment-specific
+    DEVELOPMENT_TELEGRAM_BOT_TOKEN: str | None = None
+    DEVELOPMENT_TELEGRAM_WEBHOOK_SECRET: str | None = None
+    DEVELOPMENT_TELEGRAM_WEBHOOK_URL: str | None = None
+
+    STAGING_TELEGRAM_BOT_TOKEN: str | None = None
+    STAGING_TELEGRAM_WEBHOOK_SECRET: str | None = None
+    STAGING_TELEGRAM_WEBHOOK_URL: str | None = None
+
+    PRODUCTION_TELEGRAM_BOT_TOKEN: str | None = None
+    PRODUCTION_TELEGRAM_WEBHOOK_SECRET: str | None = None
+    PRODUCTION_TELEGRAM_WEBHOOK_URL: str | None = None
+
+    # Active Telegram configuration (resolved based on ENVIRONMENT)
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_WEBHOOK_SECRET: str = ""
     TELEGRAM_WEBHOOK_URL: str = ""
@@ -119,6 +132,18 @@ class Settings(BaseSettings):
         "PRODUCTION_DATABASE_URL",
         "DEV_DATABASE_URL",
         "PROD_DATABASE_URL",
+        "DEVELOPMENT_TELEGRAM_BOT_TOKEN",
+        "STAGING_TELEGRAM_BOT_TOKEN",
+        "PRODUCTION_TELEGRAM_BOT_TOKEN",
+        "DEVELOPMENT_TELEGRAM_WEBHOOK_SECRET",
+        "STAGING_TELEGRAM_WEBHOOK_SECRET",
+        "PRODUCTION_TELEGRAM_WEBHOOK_SECRET",
+        "DEVELOPMENT_TELEGRAM_WEBHOOK_URL",
+        "STAGING_TELEGRAM_WEBHOOK_URL",
+        "PRODUCTION_TELEGRAM_WEBHOOK_URL",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_WEBHOOK_SECRET",
+        "TELEGRAM_WEBHOOK_URL",
         mode="before",
     )
     @classmethod
@@ -186,6 +211,59 @@ class Settings(BaseSettings):
             else:
                 self.DATABASE_POOL_OVERFLOW = 5
 
+        return self
+
+    @model_validator(mode="after")
+    def resolve_telegram_configuration(self) -> "Settings":
+        """Resolves active Telegram configuration based on ENVIRONMENT."""
+        if self.ENVIRONMENT == EnvironmentOptions.DEVELOPMENT:
+            self.TELEGRAM_BOT_TOKEN = (
+                self.DEVELOPMENT_TELEGRAM_BOT_TOKEN
+                or self.TELEGRAM_BOT_TOKEN
+                or ""
+            )
+            self.TELEGRAM_WEBHOOK_SECRET = (
+                self.DEVELOPMENT_TELEGRAM_WEBHOOK_SECRET
+                or self.TELEGRAM_WEBHOOK_SECRET
+                or ""
+            )
+            self.TELEGRAM_WEBHOOK_URL = (
+                self.DEVELOPMENT_TELEGRAM_WEBHOOK_URL
+                or self.TELEGRAM_WEBHOOK_URL
+                or ""
+            )
+        elif self.ENVIRONMENT == EnvironmentOptions.STAGING:
+            self.TELEGRAM_BOT_TOKEN = (
+                self.STAGING_TELEGRAM_BOT_TOKEN
+                or self.TELEGRAM_BOT_TOKEN
+                or ""
+            )
+            self.TELEGRAM_WEBHOOK_SECRET = (
+                self.STAGING_TELEGRAM_WEBHOOK_SECRET
+                or self.TELEGRAM_WEBHOOK_SECRET
+                or ""
+            )
+            self.TELEGRAM_WEBHOOK_URL = (
+                self.STAGING_TELEGRAM_WEBHOOK_URL
+                or self.TELEGRAM_WEBHOOK_URL
+                or ""
+            )
+        elif self.ENVIRONMENT == EnvironmentOptions.PRODUCTION:
+            self.TELEGRAM_BOT_TOKEN = (
+                self.PRODUCTION_TELEGRAM_BOT_TOKEN
+                or self.TELEGRAM_BOT_TOKEN
+                or ""
+            )
+            self.TELEGRAM_WEBHOOK_SECRET = (
+                self.PRODUCTION_TELEGRAM_WEBHOOK_SECRET
+                or self.TELEGRAM_WEBHOOK_SECRET
+                or ""
+            )
+            self.TELEGRAM_WEBHOOK_URL = (
+                self.PRODUCTION_TELEGRAM_WEBHOOK_URL
+                or self.TELEGRAM_WEBHOOK_URL
+                or ""
+            )
         return self
 
     @property

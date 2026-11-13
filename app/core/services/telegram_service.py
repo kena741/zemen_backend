@@ -133,26 +133,27 @@ async def process_chat_member_updated(
     new_status = event.new_chat_member.status
     event_timestamp = datetime.fromtimestamp(event.date, tz=timezone.utc)
 
-    # 1. Upsert Telegram Chat
-    chat_stmt = (
-        insert(TelegramChat)
-        .values(
-            chat_id=chat_payload.id,
-            title=chat_payload.title,
-            type=chat_payload.type,
-            is_active=True,
+    # 1. Upsert Telegram Chat (only for group, supergroup, or channel)
+    if chat_payload.type in ("group", "supergroup", "channel"):
+        chat_stmt = (
+            insert(TelegramChat)
+            .values(
+                chat_id=chat_payload.id,
+                title=chat_payload.title,
+                type=chat_payload.type,
+                is_active=True,
+            )
+            .on_conflict_do_update(
+                index_elements=[TelegramChat.chat_id],
+                set_={
+                    "title": chat_payload.title,
+                    "type": chat_payload.type,
+                    "is_active": True,
+                    "updated_at": func.now(),
+                },
+            )
         )
-        .on_conflict_do_update(
-            index_elements=[TelegramChat.chat_id],
-            set_={
-                "title": chat_payload.title,
-                "type": chat_payload.type,
-                "is_active": True,
-                "updated_at": func.now(),
-            },
-        )
-    )
-    await db.execute(chat_stmt)
+        await db.execute(chat_stmt)
 
     # 2. Upsert Joining User
     joining_user_stmt = (
@@ -461,9 +462,32 @@ async def is_chat_admin(chat_id: int, user_id: int) -> bool:
         return False
 
 
+async def fetch_chat_info(chat_id: int) -> dict[str, Any] | None:
+    """Fetches chat information directly from Telegram Bot API via getChat."""
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return None
+    url = f"https://api.telegram.org/bot{token}/getChat"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url, params={"chat_id": chat_id})
+            data = resp.json()
+            if data.get("ok"):
+                return data.get("result")
+            return None
+    except Exception as exc:
+        logger.warning("Failed to fetch chat info for %d: %s", chat_id, exc)
+        return None
+
+
 async def get_admin_chats(db: AsyncSession, user_id: int) -> list[TelegramChat]:
     """Finds all tracked chats in which the user holds administrative permissions."""
-    res = await db.execute(select(TelegramChat).where(TelegramChat.is_active == True))  # noqa: E712
+    res = await db.execute(
+        select(TelegramChat).where(
+            TelegramChat.is_active == True,  # noqa: E712
+            TelegramChat.type.in_(["group", "supergroup", "channel"]),
+        )
+    )
     all_chats = res.scalars().all()
     if not all_chats:
         return []
@@ -722,51 +746,54 @@ async def process_telegram_webhook_update(
             update_data.my_chat_member.old_chat_member.status,
             update_data.my_chat_member.new_chat_member.status,
         )
-        # Update chat active state if bot was removed
-        is_active = update_data.my_chat_member.new_chat_member.status in JOIN_STATUSES
-        chat_stmt = (
-            insert(TelegramChat)
-            .values(
-                chat_id=update_data.my_chat_member.chat.id,
-                title=update_data.my_chat_member.chat.title,
-                type=update_data.my_chat_member.chat.type,
-                is_active=is_active,
+        if update_data.my_chat_member.chat.type in ("group", "supergroup", "channel"):
+            # Update chat active state if bot was removed
+            is_active = update_data.my_chat_member.new_chat_member.status in JOIN_STATUSES
+            chat_stmt = (
+                insert(TelegramChat)
+                .values(
+                    chat_id=update_data.my_chat_member.chat.id,
+                    title=update_data.my_chat_member.chat.title,
+                    type=update_data.my_chat_member.chat.type,
+                    is_active=is_active,
+                )
+                .on_conflict_do_update(
+                    index_elements=[TelegramChat.chat_id],
+                    set_={
+                        "title": update_data.my_chat_member.chat.title,
+                        "type": update_data.my_chat_member.chat.type,
+                        "is_active": is_active,
+                        "updated_at": func.now(),
+                    },
+                )
             )
-            .on_conflict_do_update(
-                index_elements=[TelegramChat.chat_id],
-                set_={
-                    "title": update_data.my_chat_member.chat.title,
-                    "type": update_data.my_chat_member.chat.type,
-                    "is_active": is_active,
-                    "updated_at": func.now(),
-                },
-            )
-        )
-        await db.execute(chat_stmt)
-        return {"handled": True, "type": "my_chat_member", "is_active": is_active}
+            await db.execute(chat_stmt)
+            return {"handled": True, "type": "my_chat_member", "is_active": is_active}
+        return {"handled": True, "type": "my_chat_member"}
 
     if update_data.message:
         msg = update_data.message
-        # Upsert Chat to record its chat_id and details
-        chat_stmt = (
-            insert(TelegramChat)
-            .values(
-                chat_id=msg.chat.id,
-                title=msg.chat.title,
-                type=msg.chat.type,
-                is_active=True,
+        # Upsert Chat to record its chat_id and details (only for groups, supergroups, and channels)
+        if msg.chat.type in ("group", "supergroup", "channel"):
+            chat_stmt = (
+                insert(TelegramChat)
+                .values(
+                    chat_id=msg.chat.id,
+                    title=msg.chat.title,
+                    type=msg.chat.type,
+                    is_active=True,
+                )
+                .on_conflict_do_update(
+                    index_elements=[TelegramChat.chat_id],
+                    set_={
+                        "title": msg.chat.title,
+                        "type": msg.chat.type,
+                        "is_active": True,
+                        "updated_at": func.now(),
+                    },
+                )
             )
-            .on_conflict_do_update(
-                index_elements=[TelegramChat.chat_id],
-                set_={
-                    "title": msg.chat.title,
-                    "type": msg.chat.type,
-                    "is_active": True,
-                    "updated_at": func.now(),
-                },
-            )
-        )
-        await db.execute(chat_stmt)
+            await db.execute(chat_stmt)
 
         # Upsert sending user
         if msg.from_user:
@@ -794,13 +821,100 @@ async def process_telegram_webhook_update(
 
         # 1. Private Messages (Direct Message with Bot) -> Admin Dashboard
         if msg.chat.type == "private" and msg.from_user:
+            raw_text = (msg.text or "").strip()
+            first_word = raw_text.split()[0].lower() if raw_text else ""
+            command = first_word.split("@")[0]
+
+            # Support registering a chat manually: /register <chat_id> or sending the chat ID directly
+            if command in ("/register", "/addgroup", "/track", "/link") or (
+                raw_text.lstrip("-").isdigit() and (raw_text.startswith("-100") or raw_text.startswith("-"))
+            ):
+                target_chat_str = ""
+                parts = raw_text.split()
+                if len(parts) > 1:
+                    target_chat_str = parts[1]
+                elif raw_text.lstrip("-").isdigit():
+                    target_chat_str = raw_text
+
+                if target_chat_str:
+                    try:
+                        target_chat_id = int(target_chat_str)
+                    except ValueError:
+                        await send_message(
+                            chat_id=msg.chat.id,
+                            text="⚠️ <b>Invalid Chat ID format</b>. Chat IDs are usually negative numbers like <code>-1002839533734</code>.",
+                        )
+                        return {"handled": True, "type": "private_message", "action": "register_invalid"}
+
+                    chat_info = await fetch_chat_info(target_chat_id)
+                    if not chat_info:
+                        await send_message(
+                            chat_id=msg.chat.id,
+                            text=(
+                                f"❌ <b>Unable to find group <code>{target_chat_id}</code></b>\n\n"
+                                f"Please make sure the bot is added to your group as an <b>Administrator</b> with 'Invite Users via Link' permission."
+                            ),
+                        )
+                        return {"handled": True, "type": "private_message", "action": "register_not_found"}
+
+                    chat_type = chat_info.get("type", "group")
+                    if chat_type not in ("group", "supergroup", "channel"):
+                        await send_message(
+                            chat_id=msg.chat.id,
+                            text="⚠️ Only groups, supergroups, and channels can be tracked.",
+                        )
+                        return {"handled": True, "type": "private_message", "action": "register_invalid_type"}
+
+                    # Verify admin permission
+                    if not await is_chat_admin(chat_id=target_chat_id, user_id=msg.from_user.id):
+                        await send_message(
+                            chat_id=msg.chat.id,
+                            text=f"⛔ <b>Permission Denied</b>\n\nYou are not an administrator of <b>{chat_info.get('title', target_chat_id)}</b>.",
+                        )
+                        return {"handled": True, "type": "private_message", "action": "register_unauthorized"}
+
+                    # Upsert chat
+                    reg_stmt = (
+                        insert(TelegramChat)
+                        .values(
+                            chat_id=target_chat_id,
+                            title=chat_info.get("title"),
+                            type=chat_type,
+                            is_active=True,
+                        )
+                        .on_conflict_do_update(
+                            index_elements=[TelegramChat.chat_id],
+                            set_={
+                                "title": chat_info.get("title"),
+                                "type": chat_type,
+                                "is_active": True,
+                                "updated_at": func.now(),
+                            },
+                        )
+                    )
+                    await db.execute(reg_stmt)
+
+                    admin_chats = await get_admin_chats(db, user_id=msg.from_user.id)
+                    menu_text, markup = build_main_menu(admin_chats, user_first_name=msg.from_user.first_name)
+                    success_text = (
+                        f"✅ <b>Group Connected Successfully!</b>\n\n"
+                        f"<b>Group:</b> {chat_info.get('title')}\n"
+                        f"<b>Chat ID:</b> <code>{target_chat_id}</code>\n\n"
+                        f"{menu_text}"
+                    )
+                    await send_message(chat_id=msg.chat.id, text=success_text, reply_markup=markup)
+                    return {"handled": True, "type": "private_message", "action": "registered_group"}
+
             admin_chats = await get_admin_chats(db, user_id=msg.from_user.id)
             if not admin_chats:
                 restricted_msg = (
                     f"⛔ <b>Access Restricted</b>\n\n"
                     f"Hi {msg.from_user.first_name}! This bot is configured for group administrators only.\n\n"
-                    f"You are currently not recognized as an administrator in any of the tracked groups.\n\n"
-                    f"<i>Note: Make sure the bot is added to your group as an Administrator with 'Invite Users via Link' permission.</i>"
+                    f"You are currently not recognized as an administrator in any tracked groups.\n\n"
+                    f"<b>How to get access:</b>\n"
+                    f"1. Add this bot to your group or channel as an <b>Administrator</b>.\n"
+                    f"2. Send <code>/id</code> inside your group to register it, or\n"
+                    f"3. Send <code>/register &lt;chat_id&gt;</code> here in this chat (e.g. <code>/register -1002839533734</code>)."
                 )
                 await send_message(chat_id=msg.chat.id, text=restricted_msg)
             else:
@@ -809,20 +923,25 @@ async def process_telegram_webhook_update(
             return {"handled": True, "type": "private_message", "is_admin": bool(admin_chats)}
 
         # 2. Group Messages -> Direct admins to DM to keep group chat clean
-        raw_text = (msg.text or "").strip().lower()
-        if raw_text in ("/admin", "/dashboard", "/stats", "/menu", "/start"):
+        raw_text = (msg.text or "").strip()
+        first_word = raw_text.split()[0].lower() if raw_text else ""
+        command = first_word.split("@")[0]
+
+        if command in ("/admin", "/dashboard", "/stats", "/menu", "/start"):
             dm_notice = (
                 f"🔒 <b>Admin Control Panel</b>\n\n"
                 f"Hi {msg.from_user.first_name if msg.from_user else 'there'}! Administrative statistics, leaderboards, and reports are accessible exclusively in <b>Private Messages</b> to avoid group chat clutter.\n\n"
                 f"👉 Please open a direct message with me to view your dashboard."
             )
             await send_message(chat_id=msg.chat.id, text=dm_notice)
-        elif raw_text in ("/id", "/chatid", "/chat_id"):
+        elif command in ("/id", "/chatid", "/chat_id", "/register", "/track"):
             reply = (
                 f"📋 <b>Telegram Chat Info</b>\n\n"
                 f"• <b>Chat ID:</b> <code>{msg.chat.id}</code>\n"
                 f"• <b>Title:</b> {msg.chat.title or 'Group'}\n"
-                f"• <b>Type:</b> {msg.chat.type}"
+                f"• <b>Type:</b> {msg.chat.type}\n"
+                f"• <b>Status:</b> Tracked ✅\n\n"
+                f"<i>Admins can open a direct message with this bot to view the dashboard and export reports.</i>"
             )
             await send_message(chat_id=msg.chat.id, text=reply)
 
@@ -864,6 +983,7 @@ async def list_chats(
         )
         .outerjoin(member_count_subq, TelegramChat.chat_id == member_count_subq.c.chat_id)
         .outerjoin(invite_count_subq, TelegramChat.chat_id == invite_count_subq.c.chat_id)
+        .where(TelegramChat.type.in_(["group", "supergroup", "channel"]))
         .order_by(TelegramChat.updated_at.desc())
         .limit(limit)
         .offset(offset)

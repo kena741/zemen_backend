@@ -341,3 +341,83 @@ async def test_callback_query_export_csv():
         mock_answer.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_private_message_register_group():
+    from app.api.v1.schemas.telegram import TelegramMessagePayload
+    from app.persistence.sqlalchemy.models.telegram import TelegramChat
+
+    update = TelegramWebhookUpdate(
+        update_id=2004,
+        message=TelegramMessagePayload(
+            message_id=4,
+            date=int(datetime.now(timezone.utc).timestamp()),
+            chat=TelegramChatPayload(id=111, type="private"),
+            from_user=TelegramUserPayload(id=111, first_name="AdminUser", is_bot=False),
+            text="/register -1002839533734",
+        ),
+    )
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+
+    registered_chat = TelegramChat(
+        chat_id=-1002839533734,
+        title="Zemen Service",
+        type="supergroup",
+        is_active=True,
+    )
+
+    with patch(
+        "app.core.services.telegram_service.fetch_chat_info",
+        new=AsyncMock(return_value={"id": -1002839533734, "title": "Zemen Service", "type": "supergroup"}),
+    ), patch(
+        "app.core.services.telegram_service.is_chat_admin",
+        new=AsyncMock(return_value=True),
+    ), patch(
+        "app.core.services.telegram_service.get_admin_chats",
+        new=AsyncMock(return_value=[registered_chat]),
+    ), patch(
+        "app.core.services.telegram_service.send_message",
+        new=AsyncMock(),
+    ) as mock_send:
+        res = await telegram_service.process_telegram_webhook_update(mock_db, update)
+        assert res["handled"] is True
+        assert res["action"] == "registered_group"
+        mock_send.assert_called_once()
+        _, kwargs = mock_send.call_args
+        assert "Group Connected Successfully" in kwargs["text"]
+        assert "-1002839533734" in kwargs["text"]
+
+
+@pytest.mark.asyncio
+async def test_group_message_with_bot_mention():
+    from app.api.v1.schemas.telegram import TelegramMessagePayload
+
+    update = TelegramWebhookUpdate(
+        update_id=2005,
+        message=TelegramMessagePayload(
+            message_id=5,
+            date=int(datetime.now(timezone.utc).timestamp()),
+            chat=TelegramChatPayload(id=-1002839533734, title="Zemen Group", type="supergroup"),
+            from_user=TelegramUserPayload(id=111, first_name="AdminUser", is_bot=False),
+            text="/id@ZemenInviteBot",
+        ),
+    )
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+
+    with patch(
+        "app.core.services.telegram_service.send_message",
+        new=AsyncMock(),
+    ) as mock_send:
+        res = await telegram_service.process_telegram_webhook_update(mock_db, update)
+        assert res["handled"] is True
+        assert res["type"] == "group_message"
+        mock_send.assert_called_once()
+        _, kwargs = mock_send.call_args
+        assert "-1002839533734" in kwargs["text"]
+        assert "Tracked ✅" in kwargs["text"]
+
+
+

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.schemas.telegram import (
     ChatMemberUpdatedPayload,
+    TelegramChatOut,
     TelegramLeaderboardEntry,
     TelegramWebhookRegistrationResponse,
     TelegramWebhookUpdate,
@@ -51,7 +52,7 @@ async def register_webhook(
             ok=False, description="TELEGRAM_WEBHOOK_URL is not configured"
         )
 
-    updates = allowed_updates or ["chat_member", "my_chat_member"]
+    updates = allowed_updates or ["chat_member", "my_chat_member", "message"]
 
     url = f"https://api.telegram.org/bot{token}/setWebhook"
     payload: dict[str, Any] = {
@@ -340,6 +341,22 @@ async def process_chat_member_updated(
     }
 
 
+async def send_message(chat_id: int, text: str, parse_mode: str = "HTML") -> None:
+    """Helper to send a message to a chat using Telegram Bot API."""
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(
+                url,
+                json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode},
+            )
+    except Exception as exc:
+        logger.warning("Failed to send Telegram message to chat %d: %s", chat_id, exc)
+
+
 async def process_telegram_webhook_update(
     db: AsyncSession,
     update_data: TelegramWebhookUpdate,
@@ -368,13 +385,185 @@ async def process_telegram_webhook_update(
             )
             .on_conflict_do_update(
                 index_elements=[TelegramChat.chat_id],
-                set_={"is_active": is_active, "updated_at": func.now()},
+                set_={
+                    "title": update_data.my_chat_member.chat.title,
+                    "type": update_data.my_chat_member.chat.type,
+                    "is_active": is_active,
+                    "updated_at": func.now(),
+                },
             )
         )
         await db.execute(chat_stmt)
         return {"handled": True, "type": "my_chat_member", "is_active": is_active}
 
+    if update_data.message:
+        msg = update_data.message
+        # Upsert Chat to record its chat_id and details
+        chat_stmt = (
+            insert(TelegramChat)
+            .values(
+                chat_id=msg.chat.id,
+                title=msg.chat.title,
+                type=msg.chat.type,
+                is_active=True,
+            )
+            .on_conflict_do_update(
+                index_elements=[TelegramChat.chat_id],
+                set_={
+                    "title": msg.chat.title,
+                    "type": msg.chat.type,
+                    "is_active": True,
+                    "updated_at": func.now(),
+                },
+            )
+        )
+        await db.execute(chat_stmt)
+
+        # Upsert sending user
+        if msg.from_user:
+            user_stmt = (
+                insert(TelegramUser)
+                .values(
+                    user_id=msg.from_user.id,
+                    username=msg.from_user.username,
+                    first_name=msg.from_user.first_name,
+                    last_name=msg.from_user.last_name,
+                    is_bot=msg.from_user.is_bot,
+                )
+                .on_conflict_do_update(
+                    index_elements=[TelegramUser.user_id],
+                    set_={
+                        "username": msg.from_user.username,
+                        "first_name": msg.from_user.first_name,
+                        "last_name": msg.from_user.last_name,
+                        "is_bot": msg.from_user.is_bot,
+                        "updated_at": func.now(),
+                    },
+                )
+            )
+            await db.execute(user_stmt)
+
+        # Responds with chat info if user sends /id, /chatid, or /start
+        raw_text = (msg.text or "").strip().lower()
+        if raw_text in ("/id", "/chatid", "/chat_id", "/start", "/info"):
+            reply = (
+                f"📋 <b>Telegram Chat Info</b>\n\n"
+                f"• <b>Chat ID:</b> <code>{msg.chat.id}</code>\n"
+                f"• <b>Title:</b> {msg.chat.title or 'Private Chat'}\n"
+                f"• <b>Type:</b> {msg.chat.type}"
+            )
+            await send_message(chat_id=msg.chat.id, text=reply)
+
+        return {"handled": True, "type": "message", "chat_id": msg.chat.id}
+
     return {"handled": False, "type": "ignored"}
+
+
+async def list_chats(
+    db: AsyncSession,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[TelegramChatOut]:
+    """Lists all tracked chats with current active members and total invite counts."""
+    member_count_subq = (
+        select(
+            TelegramChatMember.chat_id,
+            func.count(TelegramChatMember.id).label("total_members"),
+        )
+        .where(TelegramChatMember.status.in_(["member", "administrator"]))
+        .group_by(TelegramChatMember.chat_id)
+        .subquery()
+    )
+
+    invite_count_subq = (
+        select(
+            TelegramInviteStat.chat_id,
+            func.coalesce(func.sum(TelegramInviteStat.total_invites), 0).label("total_invites"),
+        )
+        .group_by(TelegramInviteStat.chat_id)
+        .subquery()
+    )
+
+    query = (
+        select(
+            TelegramChat,
+            func.coalesce(member_count_subq.c.total_members, 0).label("total_members"),
+            func.coalesce(invite_count_subq.c.total_invites, 0).label("total_invites"),
+        )
+        .outerjoin(member_count_subq, TelegramChat.chat_id == member_count_subq.c.chat_id)
+        .outerjoin(invite_count_subq, TelegramChat.chat_id == invite_count_subq.c.chat_id)
+        .order_by(TelegramChat.updated_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    res = await db.execute(query)
+    rows = res.all()
+
+    return [
+        TelegramChatOut(
+            chat_id=chat.chat_id,
+            title=chat.title,
+            type=chat.type,
+            is_active=chat.is_active,
+            total_members=total_members,
+            total_invites=total_invites,
+            created_at=chat.created_at,
+            updated_at=chat.updated_at,
+        )
+        for chat, total_members, total_invites in rows
+    ]
+
+
+async def get_chat(
+    db: AsyncSession,
+    chat_id: int,
+) -> TelegramChatOut | None:
+    """Retrieves metadata and counters for a single chat."""
+    member_count_subq = (
+        select(
+            TelegramChatMember.chat_id,
+            func.count(TelegramChatMember.id).label("total_members"),
+        )
+        .where(TelegramChatMember.status.in_(["member", "administrator"]))
+        .group_by(TelegramChatMember.chat_id)
+        .subquery()
+    )
+
+    invite_count_subq = (
+        select(
+            TelegramInviteStat.chat_id,
+            func.coalesce(func.sum(TelegramInviteStat.total_invites), 0).label("total_invites"),
+        )
+        .group_by(TelegramInviteStat.chat_id)
+        .subquery()
+    )
+
+    query = (
+        select(
+            TelegramChat,
+            func.coalesce(member_count_subq.c.total_members, 0).label("total_members"),
+            func.coalesce(invite_count_subq.c.total_invites, 0).label("total_invites"),
+        )
+        .outerjoin(member_count_subq, TelegramChat.chat_id == member_count_subq.c.chat_id)
+        .outerjoin(invite_count_subq, TelegramChat.chat_id == invite_count_subq.c.chat_id)
+        .where(TelegramChat.chat_id == chat_id)
+    )
+    res = await db.execute(query)
+    row = res.one_or_none()
+    if not row:
+        return None
+
+    chat, total_members, total_invites = row
+    return TelegramChatOut(
+        chat_id=chat.chat_id,
+        title=chat.title,
+        type=chat.type,
+        is_active=chat.is_active,
+        total_members=total_members,
+        total_invites=total_invites,
+        created_at=chat.created_at,
+        updated_at=chat.updated_at,
+    )
 
 
 async def get_user_invite_stats(

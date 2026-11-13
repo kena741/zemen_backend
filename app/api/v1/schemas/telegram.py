@@ -44,8 +44,17 @@ class ChatMemberUpdatedPayload(APIModel):
     via_chat_folder_invite_link: bool | None = None
 
 
+class TelegramMessagePayload(APIModel):
+    message_id: int
+    date: int
+    chat: TelegramChatPayload
+    from_user: TelegramUserPayload | None = Field(None, alias="from")
+    text: str | None = None
+
+
 class TelegramWebhookUpdate(APIModel):
     update_id: int
+    message: TelegramMessagePayload | None = None
     chat_member: ChatMemberUpdatedPayload | None = None
     my_chat_member: ChatMemberUpdatedPayload | None = None
 
@@ -80,4 +89,15 @@ class TelegramWebhookRegistrationResponse(APIModel):
     ok: bool
     description: str | None = None
     url: str | None = None
+
+
+class TelegramChatOut(APIModel):
+    chat_id: int
+    title: str | None = None
+    type: str
+    is_active: bool = True
+    total_members: int = 0
+    total_invites: int = 0
+    created_at: datetime
+    updated_at: datetime
 

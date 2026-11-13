@@ -204,3 +204,60 @@ def test_telegram_leaderboard(test_client):
         assert data[1]["first_name"] == "Bob"
         assert data[1]["total_invites"] == 8
 
+
+def test_telegram_list_chats(test_client):
+    from app.api.v1.schemas.telegram import TelegramChatOut
+
+    mock_chats = [
+        TelegramChatOut(
+            chat_id=-1001234567890,
+            title="Supergroup Alpha",
+            type="supergroup",
+            is_active=True,
+            total_members=120,
+            total_invites=85,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+    ]
+
+    with patch(
+        "app.core.services.telegram_service.list_chats",
+        new=AsyncMock(return_value=mock_chats),
+    ):
+        response = test_client.get("/api/v1/telegram/chats")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["chat_id"] == -1001234567890
+        assert data[0]["title"] == "Supergroup Alpha"
+        assert data[0]["total_members"] == 120
+        assert data[0]["total_invites"] == 85
+
+
+def test_telegram_get_chat(test_client):
+    from app.api.v1.schemas.telegram import TelegramChatOut
+
+    mock_chat = TelegramChatOut(
+        chat_id=-1001234567890,
+        title="Supergroup Alpha",
+        type="supergroup",
+        is_active=True,
+        total_members=120,
+        total_invites=85,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    with patch(
+        "app.core.services.telegram_service.get_chat",
+        new=AsyncMock(return_value=mock_chat),
+    ):
+        response = test_client.get("/api/v1/telegram/chats/-1001234567890")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["chat_id"] == -1001234567890
+        assert data["title"] == "Supergroup Alpha"
+        assert data["total_invites"] == 85
+
+

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.schemas.telegram import (
+    TelegramChatOut,
     TelegramInviteStatOut,
     TelegramLeaderboardEntry,
     TelegramWebhookRegistrationResponse,
@@ -75,6 +76,40 @@ async def receive_telegram_webhook(
         # We still return HTTP 200 with ok=False so Telegram does not get stuck in a rapid retry loop,
         # but the failure is logged and observable.
         return TelegramWebhookResponse(ok=False, message=str(exc))
+
+
+@router.get(
+    "/chats",
+    response_model=list[TelegramChatOut],
+    operation_id="telegram_list_chats",
+    summary="List all tracked Telegram chats, groups, and channels with member & invite counts",
+)
+async def list_telegram_chats(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> list[TelegramChatOut]:
+    """Lists all groups and channels the bot has been added to or received events from."""
+    return await telegram_service.list_chats(db, limit=limit, offset=offset)
+
+
+@router.get(
+    "/chats/{chat_id}",
+    response_model=TelegramChatOut,
+    operation_id="telegram_get_chat",
+    summary="Get details and member/invite counts for a specific chat",
+)
+async def get_telegram_chat(
+    chat_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> TelegramChatOut:
+    chat = await telegram_service.get_chat(db, chat_id=chat_id)
+    if not chat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Chat {chat_id} not found in database",
+        )
+    return chat
 
 
 @router.get(

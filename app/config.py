@@ -119,9 +119,9 @@ class Settings(BaseSettings):
     PRODUCTION_TELEGRAM_WEBHOOK_URL: str | None = None
 
     # Active Telegram configuration (resolved based on ENVIRONMENT)
-    TELEGRAM_BOT_TOKEN: str = ""
-    TELEGRAM_WEBHOOK_SECRET: str = ""
-    TELEGRAM_WEBHOOK_URL: str = ""
+    TELEGRAM_BOT_TOKEN: str | None = None
+    TELEGRAM_WEBHOOK_SECRET: str | None = None
+    TELEGRAM_WEBHOOK_URL: str | None = None
     TELEGRAM_AUTO_REGISTER_WEBHOOK: bool = True
 
     @field_validator(
@@ -220,49 +220,40 @@ class Settings(BaseSettings):
             self.TELEGRAM_BOT_TOKEN = (
                 self.DEVELOPMENT_TELEGRAM_BOT_TOKEN
                 or self.TELEGRAM_BOT_TOKEN
-                or ""
             )
             self.TELEGRAM_WEBHOOK_SECRET = (
                 self.DEVELOPMENT_TELEGRAM_WEBHOOK_SECRET
                 or self.TELEGRAM_WEBHOOK_SECRET
-                or ""
             )
             self.TELEGRAM_WEBHOOK_URL = (
                 self.DEVELOPMENT_TELEGRAM_WEBHOOK_URL
                 or self.TELEGRAM_WEBHOOK_URL
-                or ""
             )
         elif self.ENVIRONMENT == EnvironmentOptions.STAGING:
             self.TELEGRAM_BOT_TOKEN = (
                 self.STAGING_TELEGRAM_BOT_TOKEN
                 or self.TELEGRAM_BOT_TOKEN
-                or ""
             )
             self.TELEGRAM_WEBHOOK_SECRET = (
                 self.STAGING_TELEGRAM_WEBHOOK_SECRET
                 or self.TELEGRAM_WEBHOOK_SECRET
-                or ""
             )
             self.TELEGRAM_WEBHOOK_URL = (
                 self.STAGING_TELEGRAM_WEBHOOK_URL
                 or self.TELEGRAM_WEBHOOK_URL
-                or ""
             )
         elif self.ENVIRONMENT == EnvironmentOptions.PRODUCTION:
             self.TELEGRAM_BOT_TOKEN = (
                 self.PRODUCTION_TELEGRAM_BOT_TOKEN
                 or self.TELEGRAM_BOT_TOKEN
-                or ""
             )
             self.TELEGRAM_WEBHOOK_SECRET = (
                 self.PRODUCTION_TELEGRAM_WEBHOOK_SECRET
                 or self.TELEGRAM_WEBHOOK_SECRET
-                or ""
             )
             self.TELEGRAM_WEBHOOK_URL = (
                 self.PRODUCTION_TELEGRAM_WEBHOOK_URL
                 or self.TELEGRAM_WEBHOOK_URL
-                or ""
             )
         return self
 

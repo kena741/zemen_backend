@@ -74,4 +74,13 @@ def require_admin_permission(permission: str):
     return _dep
 
 
+def require_any_admin_permission(*permissions: str):
+    async def _dep(ctx: Annotated[AdminContext, Depends(get_admin_context)]) -> AdminContext:
+        if not any(ctx.can(p) for p in permissions):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        return ctx
+
+    return _dep
+
+
 RequireAdmin = Annotated[AdminContext, Depends(get_admin_context)]

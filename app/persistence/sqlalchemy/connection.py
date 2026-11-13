@@ -10,7 +10,7 @@ async_engine = create_async_engine(
     pool_recycle=settings.DATABASE_POOL_RECYCLE,
     pool_timeout=settings.DATABASE_POOL_TIMEOUT,
     pool_pre_ping=True,
-    echo=False,
+    echo=settings.DATABASE_ECHO,
 )
 
 async_session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(

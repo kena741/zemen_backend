@@ -75,6 +75,7 @@ class BookedService(Base):
     post_job: Mapped[bool | None] = mapped_column("postJob", Boolean, nullable=True)
     coupon: Mapped[str | None] = mapped_column(Text, nullable=True)
     archive_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     next_cycle_notified_at: Mapped[datetime | None] = mapped_column(
         "nextCycleNotifiedAt", DateTime(timezone=True), nullable=True
     )

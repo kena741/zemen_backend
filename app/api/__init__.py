@@ -1,9 +1,26 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.exception_handler import register_exception_handlers
 from app.config import settings, EnvironmentOptions
 from app.persistence.sqlalchemy.map_registry import init_mapper
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Automatic Telegram Webhook Registration on application startup
+    if (
+        settings.TELEGRAM_AUTO_REGISTER_WEBHOOK
+        and settings.TELEGRAM_BOT_TOKEN
+        and settings.TELEGRAM_WEBHOOK_URL
+    ):
+        from app.core.services.telegram_service import register_webhook
+
+        await register_webhook()
+
+    yield
 
 
 def register_router(app: FastAPI) -> FastAPI:
@@ -18,6 +35,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=f"Zemen Service API — {env_name}",
         version="0.1.0",
+        lifespan=lifespan,
         description=(
             "Dedicated backend for Zemen Service (customer + provider). "
             "Validates existing Supabase Auth JWTs and uses the shared betegna Postgres schema. "
@@ -35,6 +53,7 @@ def create_app() -> FastAPI:
             {"name": "Offers", "description": "service_offer lists"},
             {"name": "Reviews", "description": "review_customer reads"},
             {"name": "Notifications", "description": "notification inbox"},
+            {"name": "Telegram", "description": "Telegram bot webhook and invite tracking"},
             {"name": "Wallet", "description": "Read-only wallet / withdrawal ledger"},
             {"name": "Payments", "description": "Plan 4 scaffold — Edge Functions remain source of truth"},
             {"name": "Admin", "description": "lolelink-admin: admin-role checks + admin_activity_log on every write"},

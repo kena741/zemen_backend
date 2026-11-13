@@ -1,0 +1,85 @@
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # 1. Install dependencies for automated testing
+  - id: install-test-dependencies
+    name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    entrypoint: uv
+    args: ["sync", "--frozen", "--group", "dev"]
+
+  # 2. Run unit tests
+  - id: run-tests
+    name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    entrypoint: uv
+    args: ["run", "pytest"]
+    waitFor: ["install-test-dependencies"]
+
+  # 3. Run application smoke check
+  - id: run-self-check
+    name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    entrypoint: uv
+    args: ["run", "python", "scripts/self_check.py"]
+    waitFor: ["install-test-dependencies"]
+
+  # 4. Build and push Docker image
+  - id: build-and-push-image
+    name: gcr.io/cloud-builders/docker
+    env:
+      - "DOCKER_BUILDKIT=1"
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        export DOCKER_BUILDKIT=1
+        docker build -f Dockerfile \
+          --platform=linux/amd64 \
+          -t "${_IMAGE_URI}:${SHORT_SHA}" \
+          -t "${_IMAGE_URI}:latest" \
+          .
+        docker push "${_IMAGE_URI}:${SHORT_SHA}"
+        docker push "${_IMAGE_URI}:latest"
+    waitFor: ["run-tests", "run-self-check"]
+
+  # 5. Deploy to Cloud Run (Production)
+  - id: deploy-cloud-run
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        # Optional Supabase secrets (uncomment once added to Secret Manager):
+        #   --set-secrets=SUPABASE_URL=SUPABASE_URL:latest \
+        #   --set-secrets=SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest \
+        #   --set-secrets=SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest \
+        #   --set-secrets=SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest \
+        gcloud run deploy "${_SERVICE}" \
+          --image "${_IMAGE_URI}:${SHORT_SHA}" \
+          --region "${_DEPLOY_REGION}" \
+          --project "${PROJECT_ID}" \
+          --platform managed \
+          --port 8080 \
+          --quiet \
+          --set-env-vars "ENVIRONMENT=production,TELEGRAM_AUTO_REGISTER_WEBHOOK=true" \
+          --set-secrets=PRODUCTION_DATABASE_URL=PRODUCTION_DATABASE_URL:latest \
+          --set-secrets=CHAPA_SECRET_KEY=CHAPA_SECRET_KEY:latest \
+          --set-secrets=CORS_ALLOWED_ORIGINS=CORS_ALLOWED_ORIGINS:latest \
+          --set-secrets=PRODUCTION_TELEGRAM_BOT_TOKEN=PRODUCTION_TELEGRAM_BOT_TOKEN:latest \
+          --set-secrets=PRODUCTION_TELEGRAM_WEBHOOK_SECRET=PRODUCTION_TELEGRAM_WEBHOOK_SECRET:latest \
+          --set-secrets=PRODUCTION_TELEGRAM_WEBHOOK_URL=PRODUCTION_TELEGRAM_WEBHOOK_URL:latest
+    waitFor: ["build-and-push-image"]
+
+substitutions:
+  _DEPLOY_REGION: europe-west4
+  _ARTIFACT_REGION: europe-west4
+  _REPOSITORY: zemen-service-backend
+  _IMAGE: backend-prod
+  _SERVICE: zemen-service-backend-prod
+  _IMAGE_URI: ${_ARTIFACT_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}
+
+images:
+  - "${_IMAGE_URI}:${SHORT_SHA}"
+  - "${_IMAGE_URI}:latest"
+

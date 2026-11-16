@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import io
 import logging
 from typing import Any
+import urllib.parse
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,6 +89,7 @@ async def register_webhook(
                     target_url,
                     updates,
                 )
+                await set_bot_commands(token)
             else:
                 logger.error("Failed to register Telegram webhook: %s", description)
             return TelegramWebhookRegistrationResponse(
@@ -102,6 +104,30 @@ async def register_webhook(
             description=str(exc),
             url=target_url,
         )
+
+
+async def set_bot_commands(bot_token: str | None = None) -> bool:
+    """Configures the official Telegram bot command menu via setMyCommands."""
+    token = bot_token or settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return False
+    commands = [
+        {"command": "start", "description": "Open dashboard & get your invite link"},
+        {"command": "invite", "description": "Get your personal invite link & stats"},
+        {"command": "leaderboard", "description": "View top inviters leaderboard"},
+        {"command": "stats", "description": "View your invite count and rank"},
+        {"command": "admin", "description": "Admin control panel (admins only)"},
+        {"command": "help", "description": "Help guide and instructions"},
+    ]
+    url = f"https://api.telegram.org/bot{token}/setMyCommands"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, json={"commands": commands})
+            data = resp.json()
+            return bool(data.get("ok", False))
+    except Exception as exc:
+        logger.warning("Failed to configure Telegram bot commands: %s", exc)
+        return False
 
 
 async def delete_webhook(bot_token: str | None = None) -> TelegramWebhookRegistrationResponse:
@@ -182,22 +208,30 @@ async def process_chat_member_updated(
 
     if event.invite_link:
         invite_link_str = event.invite_link.invite_link
-        if event.invite_link.creator:
-            link_creator_payload = event.invite_link.creator
-            link_creator_id = link_creator_payload.id
+
+        # Check if the invite link is registered in our database to a specific member
+        db_link = await repo.get_invite_link(invite_link_str)
+        if db_link and db_link.creator_user_id:
+            # Attributed to the member who requested the unique link via the bot
+            link_creator_id = db_link.creator_user_id
+        elif event.invite_link.creator and not event.invite_link.creator.is_bot:
+            link_creator_id = event.invite_link.creator.id
             await repo.upsert_user(
-                user_id=link_creator_payload.id,
-                username=link_creator_payload.username,
-                first_name=link_creator_payload.first_name,
-                last_name=link_creator_payload.last_name,
-                is_bot=link_creator_payload.is_bot,
+                user_id=event.invite_link.creator.id,
+                username=event.invite_link.creator.username,
+                first_name=event.invite_link.creator.first_name,
+                last_name=event.invite_link.creator.last_name,
+                is_bot=event.invite_link.creator.is_bot,
             )
+
+        effective_creator_id = link_creator_id or (db_link.creator_user_id if db_link else None)
+        effective_name = event.invite_link.name or (db_link.name if db_link else None)
 
         await repo.upsert_invite_link(
             invite_link=invite_link_str,
             chat_id=chat_payload.id,
-            creator_user_id=link_creator_id,
-            name=event.invite_link.name,
+            creator_user_id=effective_creator_id,
+            name=effective_name,
             is_primary=event.invite_link.is_primary,
         )
 
@@ -427,6 +461,129 @@ async def fetch_chat_info(chat_id: int) -> dict[str, Any] | None:
         return None
 
 
+_bot_username_cache: str | None = None
+
+
+async def get_bot_username() -> str:
+    """Retrieves and caches the bot username from Telegram Bot API."""
+    global _bot_username_cache
+    if _bot_username_cache:
+        return _bot_username_cache
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return "zemen_service_bot"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"https://api.telegram.org/bot{token}/getMe")
+            data = resp.json()
+            if data.get("ok"):
+                username = data.get("result", {}).get("username")
+                if username:
+                    _bot_username_cache = username
+                    return username
+    except Exception as exc:
+        logger.warning("Failed to fetch bot username: %s", exc)
+    return "zemen_service_bot"
+
+
+async def get_chat_member_status(chat_id: int, user_id: int) -> str | None:
+    """Fetches membership status of a user in a chat via getChatMember."""
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return None
+    url = f"https://api.telegram.org/bot{token}/getChatMember"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url, params={"chat_id": chat_id, "user_id": user_id})
+            data = resp.json()
+            if not data.get("ok"):
+                return None
+            return data.get("result", {}).get("status")
+    except Exception as exc:
+        logger.warning("Error fetching chat member status for user %d in chat %d: %s", user_id, chat_id, exc)
+        return None
+
+
+async def is_chat_member_or_admin(
+    db: AsyncSession | TelegramRepository,
+    chat_id: int,
+    user_id: int,
+) -> bool:
+    """Verifies whether a user is an active member, creator, or administrator in a chat."""
+    repo = _resolve_repo(db)
+    # Check DB membership first
+    existing = await repo.get_chat_member(chat_id=chat_id, user_id=user_id)
+    if existing and existing.status in JOIN_STATUSES:
+        return True
+
+    # Fallback to Telegram Bot API
+    status = await get_chat_member_status(chat_id=chat_id, user_id=user_id)
+    if status in ("creator", "administrator", "member", "restricted"):
+        # Record membership in DB so future checks are local
+        if not existing:
+            await repo.record_member_join(
+                chat_id=chat_id,
+                user_id=user_id,
+                inviter_user_id=None,
+                invite_link=None,
+                status=status,
+            )
+        else:
+            await repo.update_member_status(chat_id=chat_id, user_id=user_id, status=status)
+        return True
+    return False
+
+
+async def create_chat_invite_link(
+    chat_id: int,
+    name: str | None = None,
+) -> str | None:
+    """Creates a new unique, trackable invite link for a chat via Telegram Bot API."""
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return None
+    url = f"https://api.telegram.org/bot{token}/createChatInviteLink"
+    payload: dict[str, Any] = {"chat_id": chat_id}
+    if name:
+        payload["name"] = name[:32]  # Telegram Bot API max name length is 32 chars
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, json=payload)
+            data = resp.json()
+            if data.get("ok"):
+                return data["result"]["invite_link"]
+            logger.warning("Telegram createChatInviteLink failed for chat %d: %s", chat_id, data)
+            return None
+    except Exception as exc:
+        logger.warning("Exception calling createChatInviteLink for chat %d: %s", chat_id, exc)
+        return None
+
+
+async def get_or_create_user_invite_link(
+    repo: TelegramRepository,
+    chat_id: int,
+    user_id: int,
+    user_first_name: str,
+) -> str | None:
+    """Retrieves an existing personal invite link for the user or generates a new one."""
+    existing = await repo.get_user_invite_link(chat_id=chat_id, user_id=user_id)
+    if existing:
+        return existing.invite_link
+
+    link_name = f"{user_first_name[:15]} ({user_id})"
+    new_link = await create_chat_invite_link(chat_id=chat_id, name=link_name)
+    if new_link:
+        await repo.upsert_invite_link(
+            invite_link=new_link,
+            chat_id=chat_id,
+            creator_user_id=user_id,
+            name=link_name,
+            is_primary=False,
+        )
+        return new_link
+    return None
+
+
 async def get_admin_chats(
     db: AsyncSession | TelegramRepository,
     user_id: int,
@@ -494,11 +651,90 @@ def build_main_menu(admin_chats: list[TelegramChat], user_first_name: str = "Adm
         title = chat.title or f"Chat {chat.chat_id}"
         keyboard.append([{"text": f"👥 {title}", "callback_data": f"chat:{chat.chat_id}"}])
 
+    if admin_chats:
+        primary_chat = admin_chats[0]
+        keyboard.append([{"text": "🔗 My Personal Invite Link", "callback_data": f"user_link:{primary_chat.chat_id}"}])
+
     keyboard.append([
         {"text": "🔄 Refresh", "callback_data": "menu:main"},
         {"text": "ℹ️ About", "callback_data": "menu:about"},
     ])
     return text, {"inline_keyboard": keyboard}
+
+
+def build_user_invite_card(
+    chat_title: str,
+    chat_id: int,
+    invite_link: str,
+    total_invites: int,
+    rank: int | None,
+    is_admin: bool = False,
+) -> tuple[str, dict[str, Any]]:
+    """Builds the personal invite link and stats dashboard card for members."""
+    rank_display = f"#{rank}" if rank else "Unranked"
+    text = (
+        f"🔗 <b>Your Personal Invite Link</b>\n"
+        f"Group: <b>{chat_title}</b>\n\n"
+        f"Share your unique link with friends and contacts. Anyone who joins using this link will be credited to your score!\n\n"
+        f"👉 <code>{invite_link}</code>\n"
+        f"<i>(Tap the link above to copy)</i>\n\n"
+        f"📊 <b>Your Invite Stats:</b>\n"
+        f"• Verified Invites: <b>{total_invites}</b>\n"
+        f"• Current Rank: <b>{rank_display}</b>"
+    )
+
+    share_text = f"Join {chat_title} on Telegram:"
+    share_url = f"https://t.me/share/url?url={urllib.parse.quote(invite_link)}&text={urllib.parse.quote(share_text)}"
+
+    keyboard = [
+        [{"text": "🔗 Share Invite Link", "url": share_url}],
+        [
+            {"text": "🏆 Leaderboard", "callback_data": f"user_lb:{chat_id}"},
+            {"text": "🔄 Refresh Stats", "callback_data": f"user_stats:{chat_id}"},
+        ],
+    ]
+    if is_admin:
+        keyboard.append([{"text": "🛡️ Admin Panel", "callback_data": "menu:main"}])
+
+    return text, {"inline_keyboard": keyboard}
+
+
+async def build_user_leaderboard_view(
+    db: AsyncSession | TelegramRepository,
+    chat_id: int,
+    user_id: int,
+) -> tuple[str, dict[str, Any]]:
+    """Builds the top inviters leaderboard view for regular members."""
+    repo = _resolve_repo(db)
+    chat = await repo.get_chat(chat_id)
+    chat_title = chat.title if chat and chat.title else f"Group {chat_id}"
+    leaderboard = await get_chat_leaderboard(repo, chat_id=chat_id, limit=10)
+    user_stat = await repo.get_user_invite_stat(chat_id, user_id)
+    user_rank = await repo.get_user_rank(chat_id, user_id)
+    my_invites = user_stat.total_invites if user_stat else 0
+    my_rank_str = f"#{user_rank}" if user_rank else "Unranked"
+
+    text_lines = [
+        f"🏆 <b>Top Inviters Leaderboard</b>",
+        f"Group: <b>{chat_title}</b>\n",
+    ]
+    if not leaderboard:
+        text_lines.append("<i>No verified invites recorded in this chat yet.</i>\n")
+    else:
+        medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+        for idx, entry in enumerate(leaderboard, start=1):
+            icon = medals.get(idx, f"<b>{idx}.</b>")
+            user_display = f"@{entry.username}" if entry.username else entry.first_name
+            text_lines.append(f"{icon} {user_display} — <b>{entry.total_invites}</b> invites")
+        text_lines.append("")
+
+    text_lines.append(f"👤 <b>Your Standing:</b> <b>{my_invites}</b> invites (Rank: <b>{my_rank_str}</b>)")
+
+    keyboard = [
+        [{"text": "« Back to My Link", "callback_data": f"user_link:{chat_id}"}],
+        [{"text": "🔄 Refresh", "callback_data": f"user_lb:{chat_id}"}],
+    ]
+    return "\n".join(text_lines), {"inline_keyboard": keyboard}
 
 
 async def build_chat_detail_menu(
@@ -523,6 +759,7 @@ async def build_chat_detail_menu(
         f"Select an action:"
     )
     keyboard = [
+        [{"text": "🔗 My Personal Invite Link", "callback_data": f"user_link:{chat_id}"}],
         [{"text": "🏆 Top Inviters (Leaderboard)", "callback_data": f"lb:{chat_id}"}],
         [{"text": "🔗 Invite Links Performance", "callback_data": f"links:{chat_id}"}],
         [{"text": "📥 Export Report (CSV)", "callback_data": f"export:{chat_id}"}],
@@ -670,6 +907,55 @@ async def handle_callback_query(
         await send_document(dm_chat_id, filename, csv_data.encode("utf-8"), caption=caption)
         return {"handled": True, "action": "export", "chat_id": target_chat_id}
 
+    if data.startswith("user_link:") or data.startswith("user_stats:"):
+        is_refresh = data.startswith("user_stats:")
+        target_chat_id = int(data.split(":")[1])
+        if not await is_chat_member_or_admin(repo, target_chat_id, user_id):
+            await answer_callback_query(
+                callback_query.id,
+                "⛔ You are not recognized as an active member of this group. Please join the group first!",
+                show_alert=True,
+            )
+            return {"handled": False, "error": "not_member"}
+
+        chat = await repo.get_chat(target_chat_id)
+        chat_title = chat.title if chat and chat.title else f"Group {target_chat_id}"
+        invite_link = await get_or_create_user_invite_link(
+            repo, target_chat_id, user_id, callback_query.from_user.first_name
+        )
+        if not invite_link:
+            await answer_callback_query(
+                callback_query.id,
+                "❌ Unable to generate invite link. Ensure bot has admin permissions with 'Invite Users via Link'.",
+                show_alert=True,
+            )
+            return {"handled": False, "error": "link_creation_failed"}
+
+        stat = await repo.get_user_invite_stat(target_chat_id, user_id)
+        rank = await repo.get_user_rank(target_chat_id, user_id)
+        is_admin = await is_chat_admin(target_chat_id, user_id)
+        text, markup = build_user_invite_card(
+            chat_title=chat_title,
+            chat_id=target_chat_id,
+            invite_link=invite_link,
+            total_invites=stat.total_invites if stat else 0,
+            rank=rank,
+            is_admin=is_admin,
+        )
+        await edit_message_text(dm_chat_id, message_id, text, reply_markup=markup)
+        if is_refresh:
+            await answer_callback_query(callback_query.id, "Stats refreshed! 🔄")
+        else:
+            await answer_callback_query(callback_query.id)
+        return {"handled": True, "action": "user_link", "chat_id": target_chat_id}
+
+    if data.startswith("user_lb:"):
+        target_chat_id = int(data.split(":")[1])
+        text, markup = await build_user_leaderboard_view(repo, target_chat_id, user_id)
+        await edit_message_text(dm_chat_id, message_id, text, reply_markup=markup)
+        await answer_callback_query(callback_query.id)
+        return {"handled": True, "action": "user_leaderboard", "chat_id": target_chat_id}
+
     await answer_callback_query(callback_query.id)
     return {"handled": False, "type": "unknown_callback"}
 
@@ -727,18 +1013,18 @@ async def process_telegram_webhook_update(
                 is_bot=msg.from_user.is_bot,
             )
 
-        # 1. Private Messages (Direct Message with Bot) -> Admin Dashboard
+        # 1. Private Messages (Direct Message with Bot) -> Admin Dashboard & Member Invite Links
         if msg.chat.type == "private" and msg.from_user:
             raw_text = (msg.text or "").strip()
-            first_word = raw_text.split()[0].lower() if raw_text else ""
+            parts = raw_text.split()
+            first_word = parts[0].lower() if parts else ""
             command = first_word.split("@")[0]
 
             # Support registering a chat manually: /register <chat_id> or sending the chat ID directly
-            if command in ("/register", "/addgroup", "/track", "/link") or (
+            if command in ("/register", "/addgroup", "/track") or (
                 raw_text.lstrip("-").isdigit() and (raw_text.startswith("-100") or raw_text.startswith("-"))
             ):
                 target_chat_str = ""
-                parts = raw_text.split()
                 if len(parts) > 1:
                     target_chat_str = parts[1]
                 elif raw_text.lstrip("-").isdigit():
@@ -800,27 +1086,234 @@ async def process_telegram_webhook_update(
                     await send_message(chat_id=msg.chat.id, text=success_text, reply_markup=markup)
                     return {"handled": True, "type": "private_message", "action": "registered_group"}
 
+            # Deep linking support: /start invite_<chat_id> or /start link_<chat_id>
+            deep_chat_id: int | None = None
+            if command == "/start" and len(parts) > 1:
+                arg = parts[1]
+                for prefix in ("invite_", "link_", "ref_"):
+                    if arg.startswith(prefix):
+                        clean_arg = arg[len(prefix):]
+                        try:
+                            parsed_val = int(clean_arg)
+                            if parsed_val > 0:
+                                parsed_val = -parsed_val if str(parsed_val).startswith("100") else -int(f"100{parsed_val}")
+                            deep_chat_id = parsed_val
+                        except ValueError:
+                            pass
+                        break
+
+            if deep_chat_id:
+                chat = await repo.get_chat(deep_chat_id)
+                if not chat:
+                    for c in await repo.get_active_group_chats():
+                        if abs(c.chat_id) == abs(deep_chat_id):
+                            chat = c
+                            deep_chat_id = c.chat_id
+                            break
+
+                if chat and await is_chat_member_or_admin(repo, deep_chat_id, msg.from_user.id):
+                    invite_link = await get_or_create_user_invite_link(
+                        repo, deep_chat_id, msg.from_user.id, msg.from_user.first_name
+                    )
+                    if invite_link:
+                        stat = await repo.get_user_invite_stat(deep_chat_id, msg.from_user.id)
+                        rank = await repo.get_user_rank(deep_chat_id, msg.from_user.id)
+                        is_admin = await is_chat_admin(deep_chat_id, msg.from_user.id)
+                        text, markup = build_user_invite_card(
+                            chat_title=chat.title or f"Group {deep_chat_id}",
+                            chat_id=deep_chat_id,
+                            invite_link=invite_link,
+                            total_invites=stat.total_invites if stat else 0,
+                            rank=rank,
+                            is_admin=is_admin,
+                        )
+                        await send_message(chat_id=msg.chat.id, text=text, reply_markup=markup)
+                        return {"handled": True, "type": "private_message", "action": "deep_link_invite"}
+
+                if chat:
+                    chat_info = await fetch_chat_info(deep_chat_id)
+                    group_title = chat.title or (chat_info.get("title") if chat_info else "the group")
+                    join_url = (chat_info.get("invite_link") if chat_info else None) or (
+                        f"https://t.me/{chat_info.get('username')}" if chat_info and chat_info.get("username") else None
+                    )
+                    welcome_msg = (
+                        f"👋 <b>Welcome, {msg.from_user.first_name}!</b>\n\n"
+                        f"To get your personal invite link and track your invites for <b>{group_title}</b>, please join the group first:"
+                    )
+                    buttons = []
+                    if join_url:
+                        buttons.append([{"text": f"👉 Join {group_title}", "url": join_url}])
+                    buttons.append([{"text": "✅ I've Joined! Get My Link", "callback_data": f"user_link:{deep_chat_id}"}])
+                    await send_message(chat_id=msg.chat.id, text=welcome_msg, reply_markup={"inline_keyboard": buttons})
+                    return {"handled": True, "type": "private_message", "action": "deep_link_not_joined"}
+
+            # Direct member commands: /invite, /link, /myref, /mystats, /stats
+            is_invite_cmd = command in ("/invite", "/link", "/myref", "/mystats", "/stats")
             admin_chats = await get_admin_chats(repo, user_id=msg.from_user.id)
-            if not admin_chats:
-                restricted_msg = (
-                    f"⛔ <b>Access Restricted</b>\n\n"
-                    f"Hi {msg.from_user.first_name}! This bot is configured for group administrators only.\n\n"
-                    f"You are currently not recognized as an administrator in any tracked groups.\n\n"
-                    f"<b>How to get access:</b>\n"
-                    f"1. Add this bot to your group or channel as an <b>Administrator</b>.\n"
-                    f"2. Send <code>/id</code> inside your group to register it, or\n"
-                    f"3. Send <code>/register &lt;chat_id&gt;</code> here in this chat (e.g. <code>/register -1002839533734</code>)."
+
+            if is_invite_cmd:
+                target_chat: TelegramChat | None = None
+                if admin_chats:
+                    target_chat = admin_chats[0]
+                else:
+                    active_chats = await repo.get_active_group_chats()
+                    member_chats = [c for c in active_chats if await is_chat_member_or_admin(repo, c.chat_id, msg.from_user.id)]
+                    target_chat = member_chats[0] if member_chats else (active_chats[0] if active_chats else None)
+
+                if target_chat and await is_chat_member_or_admin(repo, target_chat.chat_id, msg.from_user.id):
+                    invite_link = await get_or_create_user_invite_link(
+                        repo, target_chat.chat_id, msg.from_user.id, msg.from_user.first_name
+                    )
+                    if invite_link:
+                        stat = await repo.get_user_invite_stat(target_chat.chat_id, msg.from_user.id)
+                        rank = await repo.get_user_rank(target_chat.chat_id, msg.from_user.id)
+                        is_admin = bool(admin_chats)
+                        text, markup = build_user_invite_card(
+                            chat_title=target_chat.title or "Group",
+                            chat_id=target_chat.chat_id,
+                            invite_link=invite_link,
+                            total_invites=stat.total_invites if stat else 0,
+                            rank=rank,
+                            is_admin=is_admin,
+                        )
+                        await send_message(chat_id=msg.chat.id, text=text, reply_markup=markup)
+                        return {"handled": True, "type": "private_message", "action": "user_invite_card"}
+
+            # Leaderboard command: /leaderboard, /top, /lb
+            if command in ("/leaderboard", "/top", "/lb"):
+                target_chat = None
+                if admin_chats:
+                    target_chat = admin_chats[0]
+                else:
+                    active_chats = await repo.get_active_group_chats()
+                    member_chats = [c for c in active_chats if await is_chat_member_or_admin(repo, c.chat_id, msg.from_user.id)]
+                    target_chat = member_chats[0] if member_chats else (active_chats[0] if active_chats else None)
+
+                if target_chat:
+                    text, markup = await build_user_leaderboard_view(repo, target_chat.chat_id, msg.from_user.id)
+                    await send_message(chat_id=msg.chat.id, text=text, reply_markup=markup)
+                    return {"handled": True, "type": "private_message", "action": "user_leaderboard"}
+
+            # Help & instructions command: /help, /info
+            if command in ("/help", "/info"):
+                help_text = (
+                    "ℹ️ <b>Zemen Invite Tracker — Commands & Guide</b>\n\n"
+                    "• <b>/invite</b> or <b>/link</b> — Get your personal trackable invite link and view stats\n"
+                    "• <b>/leaderboard</b> — View top inviters in the group\n"
+                    "• <b>/stats</b> — View your verified invite count and rank\n"
+                    "• <b>/admin</b> — Open the Admin Control Panel (admins only)\n"
+                    "• <b>/help</b> — Show this guide\n\n"
+                    "<b>How invite tracking works:</b>\n"
+                    "1. Share your unique link with friends or add members directly to the group.\n"
+                    "2. When a member joins the group, your verified invite count increases by <b>+1</b>!\n"
+                    "3. Duplicate rejoins and bots are automatically excluded."
                 )
-                await send_message(chat_id=msg.chat.id, text=restricted_msg)
-            else:
+                await send_message(chat_id=msg.chat.id, text=help_text)
+                return {"handled": True, "type": "private_message", "action": "help"}
+
+            # Admin panel command: /admin, /dashboard, /panel
+            if command in ("/admin", "/dashboard", "/panel"):
+                if admin_chats:
+                    text, markup = build_main_menu(admin_chats, user_first_name=msg.from_user.first_name)
+                    await send_message(chat_id=msg.chat.id, text=text, reply_markup=markup)
+                    return {"handled": True, "type": "private_message", "is_admin": True}
+                else:
+                    await send_message(
+                        chat_id=msg.chat.id,
+                        text="⛔ <b>Access Restricted</b>\n\nYou are not recognized as an administrator in any tracked groups.",
+                    )
+                    return {"handled": True, "type": "private_message", "action": "admin_unauthorized"}
+
+            # If admin and standard /start or /menu command
+            if admin_chats:
                 text, markup = build_main_menu(admin_chats, user_first_name=msg.from_user.first_name)
                 await send_message(chat_id=msg.chat.id, text=text, reply_markup=markup)
-            return {"handled": True, "type": "private_message", "is_admin": bool(admin_chats)}
+                return {"handled": True, "type": "private_message", "is_admin": True}
 
-        # 2. Group Messages -> Direct admins to DM to keep group chat clean
+            # Normal member flow
+            active_chats = await repo.get_active_group_chats()
+            member_chats = [c for c in active_chats if await is_chat_member_or_admin(repo, c.chat_id, msg.from_user.id)]
+
+            if len(member_chats) == 1:
+                target_chat = member_chats[0]
+                invite_link = await get_or_create_user_invite_link(
+                    repo, target_chat.chat_id, msg.from_user.id, msg.from_user.first_name
+                )
+                if invite_link:
+                    stat = await repo.get_user_invite_stat(target_chat.chat_id, msg.from_user.id)
+                    rank = await repo.get_user_rank(target_chat.chat_id, msg.from_user.id)
+                    text, markup = build_user_invite_card(
+                        chat_title=target_chat.title or "Group",
+                        chat_id=target_chat.chat_id,
+                        invite_link=invite_link,
+                        total_invites=stat.total_invites if stat else 0,
+                        rank=rank,
+                        is_admin=False,
+                    )
+                    await send_message(chat_id=msg.chat.id, text=text, reply_markup=markup)
+                    return {"handled": True, "type": "private_message", "action": "member_invite_card"}
+
+            elif len(member_chats) > 1:
+                text = (
+                    f"👋 <b>Welcome, {msg.from_user.first_name}!</b>\n\n"
+                    f"Select a group below to get your personal invite link and view your stats:"
+                )
+                keyboard = [
+                    [{"text": f"👥 {c.title or c.chat_id}", "callback_data": f"user_link:{c.chat_id}"}]
+                    for c in member_chats
+                ]
+                await send_message(chat_id=msg.chat.id, text=text, reply_markup={"inline_keyboard": keyboard})
+                return {"handled": True, "type": "private_message", "action": "member_chat_picker"}
+
+            else:
+                # User is not yet recognized in any active tracked group
+                if active_chats:
+                    primary_chat = active_chats[0]
+                    chat_info = await fetch_chat_info(primary_chat.chat_id)
+                    group_title = primary_chat.title or (chat_info.get("title") if chat_info else "Community Group")
+                    join_url = (chat_info.get("invite_link") if chat_info else None) or (
+                        f"https://t.me/{chat_info.get('username')}" if chat_info and chat_info.get("username") else None
+                    )
+                    welcome_msg = (
+                        f"👋 <b>Welcome, {msg.from_user.first_name}!</b>\n\n"
+                        f"I track verified member invites and leaderboards for <b>{group_title}</b>.\n\n"
+                        f"To get your personal invite link and start earning invites, please join the group first:\n"
+                    )
+                    buttons = []
+                    if join_url:
+                        buttons.append([{"text": f"👉 Join {group_title}", "url": join_url}])
+                    buttons.append([{"text": "🔗 Get My Invite Link", "callback_data": f"user_link:{primary_chat.chat_id}"}])
+                    await send_message(chat_id=msg.chat.id, text=welcome_msg, reply_markup={"inline_keyboard": buttons})
+                    return {"handled": True, "type": "private_message", "action": "not_member_prompt"}
+                else:
+                    restricted_msg = (
+                        f"👋 <b>Welcome, {msg.from_user.first_name}!</b>\n\n"
+                        f"No active groups are currently configured.\n\n"
+                        f"If you are an administrator, add this bot to your group with 'Invite Users via Link' permission and send <code>/id</code> to get started."
+                    )
+                    await send_message(chat_id=msg.chat.id, text=restricted_msg)
+                    return {"handled": True, "type": "private_message", "action": "no_chats"}
+
+        # 2. Group Messages -> Direct admins and members to DM to keep group chat clean
         raw_text = (msg.text or "").strip()
         first_word = raw_text.split()[0].lower() if raw_text else ""
         command = first_word.split("@")[0]
+
+        if command in ("/invite", "/link", "/myref", "/mystats"):
+            bot_username = await get_bot_username()
+            deep_link = f"https://t.me/{bot_username}?start=invite_{abs(msg.chat.id)}"
+            reply = (
+                f"👋 Hi <b>{msg.from_user.first_name if msg.from_user else 'there'}</b>!\n\n"
+                f"You can get your own unique, personal invite link and track your invites in private chat.\n\n"
+                f"👇 Tap the button below to get your link:"
+            )
+            markup = {
+                "inline_keyboard": [
+                    [{"text": "🔗 Get My Invite Link", "url": deep_link}]
+                ]
+            }
+            await send_message(chat_id=msg.chat.id, text=reply, reply_markup=markup)
+            return {"handled": True, "type": "group_message", "action": "invite_link_prompt"}
 
         if command in ("/admin", "/dashboard", "/stats", "/menu", "/start"):
             dm_notice = (
@@ -829,6 +1322,8 @@ async def process_telegram_webhook_update(
                 f"👉 Please open a direct message with me to view your dashboard."
             )
             await send_message(chat_id=msg.chat.id, text=dm_notice)
+            return {"handled": True, "type": "group_message", "action": "admin_prompt"}
+
         elif command in ("/id", "/chatid", "/chat_id", "/register", "/track"):
             reply = (
                 f"📋 <b>Telegram Chat Info</b>\n\n"
@@ -836,9 +1331,10 @@ async def process_telegram_webhook_update(
                 f"• <b>Title:</b> {msg.chat.title or 'Group'}\n"
                 f"• <b>Type:</b> {msg.chat.type}\n"
                 f"• <b>Status:</b> Tracked ✅\n\n"
-                f"<i>Admins can open a direct message with this bot to view the dashboard and export reports.</i>"
+                f"<i>Members and admins can open a direct message with this bot to get personal invite links and view rankings.</i>"
             )
             await send_message(chat_id=msg.chat.id, text=reply)
+            return {"handled": True, "type": "group_message", "action": "chat_info"}
 
         return {"handled": True, "type": "group_message", "chat_id": msg.chat.id}
 

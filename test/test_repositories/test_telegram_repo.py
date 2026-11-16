@@ -119,6 +119,20 @@ async def test_telegram_repo_invite_link_operations():
     mock_session.execute = AsyncMock(return_value=mock_result)
 
     repo = TelegramRepository(mock_session)
+
+    # 1. get_invite_link
+    mock_result.scalar_one_or_none.return_value = link
+    found_link = await repo.get_invite_link("https://t.me/+AbCdEf")
+    assert found_link is not None
+    assert found_link.invite_link == "https://t.me/+AbCdEf"
+
+    # 2. get_user_invite_link
+    mock_result.scalar_one_or_none.return_value = link
+    user_link = await repo.get_user_invite_link(-1001234567890, 111)
+    assert user_link is not None
+    assert user_link.creator_user_id == 111
+
+    # 3. upsert_invite_link
     await repo.upsert_invite_link(
         invite_link="https://t.me/+AbCdEf",
         chat_id=-1001234567890,
@@ -214,3 +228,15 @@ async def test_telegram_repo_membership_and_invite_stats():
     csv_rows = await repo.get_chat_invites_for_csv(-1001234567890)
     assert len(csv_rows) == 1
     assert csv_rows[0][0] == 111
+
+    # get_user_rank
+    mock_result.scalar_one_or_none.side_effect = [stat, 2]  # 2 users with more invites -> rank 3
+    rank = await repo.get_user_rank(-1001234567890, 111)
+    assert rank == 3
+
+    # get_user_member_chats
+    chat_mock = TelegramChat(chat_id=-1001234567890, title="Test Group", type="supergroup", is_active=True)
+    mock_result.scalars.return_value.all.return_value = [chat_mock]
+    member_chats = await repo.get_user_member_chats(111)
+    assert len(member_chats) == 1
+    assert member_chats[0].chat_id == -1001234567890

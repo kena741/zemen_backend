@@ -233,6 +233,27 @@ class TelegramRepository(BaseRepository[TelegramChat, Any]):
     # Invite Link Persistence
     # =========================================================================
 
+    async def get_invite_link(self, invite_link: str) -> TelegramInviteLink | None:
+        """Retrieves raw TelegramInviteLink entity by invite_link URL."""
+        stmt = select(TelegramInviteLink).where(TelegramInviteLink.invite_link == invite_link)
+        res = await self.session.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def get_user_invite_link(self, chat_id: int, user_id: int) -> TelegramInviteLink | None:
+        """Retrieves existing trackable personal invite link created for a user in a specific chat."""
+        stmt = (
+            select(TelegramInviteLink)
+            .where(
+                TelegramInviteLink.chat_id == chat_id,
+                TelegramInviteLink.creator_user_id == user_id,
+                TelegramInviteLink.is_primary == False,  # noqa: E712
+            )
+            .order_by(TelegramInviteLink.created_at.desc())
+            .limit(1)
+        )
+        res = await self.session.execute(stmt)
+        return res.scalar_one_or_none()
+
     async def upsert_invite_link(
         self,
         invite_link: str,
@@ -241,21 +262,30 @@ class TelegramRepository(BaseRepository[TelegramChat, Any]):
         name: str | None = None,
         is_primary: bool = False,
     ) -> None:
-        """Upserts an invite link metadata record."""
+        """Upserts an invite link metadata record while preserving existing creator attribution."""
+        existing = await self.get_invite_link(invite_link)
+        effective_creator_id = creator_user_id
+        effective_name = name
+        if existing:
+            if effective_creator_id is None and existing.creator_user_id is not None:
+                effective_creator_id = existing.creator_user_id
+            if effective_name is None and existing.name is not None:
+                effective_name = existing.name
+
         stmt = (
             insert(TelegramInviteLink)
             .values(
                 invite_link=invite_link,
                 chat_id=chat_id,
-                creator_user_id=creator_user_id,
-                name=name,
+                creator_user_id=effective_creator_id,
+                name=effective_name,
                 is_primary=is_primary,
             )
             .on_conflict_do_update(
                 index_elements=[TelegramInviteLink.invite_link],
                 set_={
-                    "creator_user_id": creator_user_id,
-                    "name": name,
+                    "creator_user_id": effective_creator_id,
+                    "name": effective_name,
                     "is_primary": is_primary,
                 },
             )
@@ -391,6 +421,33 @@ class TelegramRepository(BaseRepository[TelegramChat, Any]):
         )
         res = await self.session.execute(stmt)
         return res.scalar_one_or_none()
+
+    async def get_user_rank(self, chat_id: int, user_id: int) -> int | None:
+        """Calculates rank of user in a chat based on total verified invites."""
+        stat = await self.get_user_invite_stat(chat_id, user_id)
+        if not stat or stat.total_invites <= 0:
+            return None
+        stmt = select(func.count(TelegramInviteStat.user_id)).where(
+            TelegramInviteStat.chat_id == chat_id,
+            TelegramInviteStat.total_invites > stat.total_invites,
+        )
+        res = await self.session.execute(stmt)
+        higher_count = res.scalar_one_or_none() or 0
+        return higher_count + 1
+
+    async def get_user_member_chats(self, user_id: int) -> list[TelegramChat]:
+        """Finds all active chats where the user is an active member or administrator according to DB."""
+        stmt = (
+            select(TelegramChat)
+            .join(TelegramChatMember, TelegramChatMember.chat_id == TelegramChat.chat_id)
+            .where(
+                TelegramChatMember.user_id == user_id,
+                TelegramChatMember.status.in_(["member", "administrator"]),
+                TelegramChat.is_active == True,  # noqa: E712
+            )
+        )
+        res = await self.session.execute(stmt)
+        return list(res.scalars().all())
 
     async def get_chat_invites_for_csv(self, chat_id: int) -> list[Any]:
         """Fetches full ranking and user metadata for CSV export."""

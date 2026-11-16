@@ -9,6 +9,7 @@ import pytest
 
 from app.api.v1.routers.payments import get_chapa_payment_service
 from app.api.v1.routers.wallet import get_wallet_service
+from app.config import settings
 from app.core.security.deps import AuthContext
 from app.domain.finance import (
     CountryTaxDomain,
@@ -149,7 +150,8 @@ def test_wallet_balance_and_transactions(api_client, mock_wallet_service):
     assert res_tx.json()["items"][0]["amount"] == "500.00"
 
 
-def test_provider_withdrawals_and_payment_methods(api_client, mock_wallet_service):
+def test_provider_withdrawals_and_payment_methods(api_client, mock_wallet_service, monkeypatch):
+    monkeypatch.setattr(settings, "PAYMENTS_WRITES_ENABLED", True)
     user_id = uuid4()
     prov_id = uuid4()
     w_id = uuid4()

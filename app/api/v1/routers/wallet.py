@@ -18,6 +18,8 @@ from app.api.v1.schemas.wallet import (
     WithdrawalOut,
 )
 from app.core.security.deps import RequireAuth, RequireProvider
+from app.core.security.payments import require_payment_writes
+from app.core.services import payment_writes
 from app.core.services.wallet_service import WalletService
 from app.persistence.repositories.customer_repo import CustomerRepository
 from app.persistence.repositories.provider_payment_method_repo import ProviderPaymentMethodRepository
@@ -122,6 +124,7 @@ async def request_withdrawal(
     ctx: RequireProvider,
     service: Annotated[WalletService, Depends(get_wallet_service)],
 ) -> WithdrawalOut:
+    require_payment_writes()
     assert ctx.provider_id is not None
     withdrawal = await service.request_withdrawal(
         provider_id=ctx.provider_id,
@@ -130,6 +133,22 @@ async def request_withdrawal(
         note=body.note,
     )
     return WithdrawalOut.model_validate(withdrawal)
+
+
+@router.post(
+    "/withdrawals/{withdrawal_id}/cancel",
+    response_model=WithdrawalOut,
+    operation_id="wallet_cancel_withdrawal",
+    summary="Cancel a pending withdrawal request",
+)
+async def cancel_withdrawal(
+    withdrawal_id: UUID,
+    ctx: RequireProvider,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> WithdrawalOut:
+    require_payment_writes()
+    row = await payment_writes.cancel_pending_withdrawal(db, ctx=ctx, withdrawal_id=withdrawal_id)
+    return WithdrawalOut.model_validate(row)
 
 
 @router.get(

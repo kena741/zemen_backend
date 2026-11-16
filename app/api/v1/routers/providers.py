@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.schemas.catalog import ServiceCreate, ServiceOut, ServicePatch
@@ -15,6 +15,8 @@ from app.api.v1.schemas.handyman import HandymanCreate, HandymanOut, HandymanPat
 from app.api.v1.schemas.provider import (
     CompanyOut,
     CompanyWrite,
+    PaymentMethodOut,
+    PaymentMethodWrite,
     ProviderCreate,
     ProviderDocumentOut,
     ProviderDocumentsBody,
@@ -27,6 +29,7 @@ from app.core.services import (
     provider_payment_methods,
     provider_service_mgmt,
 )
+from app.core.services.provider_payment_methods import PaymentMethodConflict
 from app.core.services.handyman_service import HandymanService
 from app.core.services.provider_documents import ProviderDocumentService
 from app.core.services.provider_profile_service import ProviderProfileService
@@ -364,6 +367,68 @@ async def delete_my_document(
 ) -> None:
     assert ctx.provider_id is not None
     await service.delete_document(ctx.provider_id, document_id)
+
+
+# ======================== Provider Payment Method Endpoints ========================
+
+
+@router.get("/me/payment-methods", response_model=list[PaymentMethodOut], operation_id="providers_list_payment_methods")
+async def providers_list_payment_methods(ctx: RequireProvider, db: Annotated[AsyncSession, Depends(get_db)]):
+    assert ctx.provider_id is not None
+    rows = await provider_payment_methods.list_for_provider(db, ctx.provider_id)
+    return [PaymentMethodOut.model_validate(r) for r in rows]
+
+
+@router.put("/me/payment-methods", response_model=PaymentMethodOut, operation_id="providers_upsert_payment_method")
+async def providers_upsert_payment_method(
+    body: PaymentMethodWrite, ctx: RequireProvider, db: Annotated[AsyncSession, Depends(get_db)]
+):
+    assert ctx.provider_id is not None
+    try:
+        row = await provider_payment_methods.upsert(db, ctx.provider_id, body.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except PaymentMethodConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return PaymentMethodOut.model_validate(row)
+
+
+@router.patch(
+    "/me/payment-methods/{method_id}",
+    response_model=PaymentMethodOut,
+    operation_id="providers_patch_payment_method",
+)
+async def providers_patch_payment_method(
+    method_id: UUID,
+    body: PaymentMethodWrite,
+    ctx: RequireProvider,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    assert ctx.provider_id is not None
+    try:
+        row = await provider_payment_methods.upsert(
+            db, ctx.provider_id, body.model_dump(exclude_unset=True), method_id=method_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except PaymentMethodConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return PaymentMethodOut.model_validate(row)
+
+
+@router.delete(
+    "/me/payment-methods/{method_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="providers_delete_payment_method",
+)
+async def providers_delete_payment_method(
+    method_id: UUID, ctx: RequireProvider, db: Annotated[AsyncSession, Depends(get_db)]
+) -> None:
+    assert ctx.provider_id is not None
+    row = await provider_payment_methods.get_owned(db, ctx.provider_id, method_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment method not found")
+    await provider_payment_methods.delete_owned(db, row)
 
 
 # ======================== Provider Service Management Endpoints ========================

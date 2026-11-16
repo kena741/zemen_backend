@@ -93,6 +93,7 @@ async def chapa_verify(
     body: ChapaVerifyBody,
     service: Annotated[ChapaPaymentService, Depends(get_chapa_payment_service)],
 ) -> dict[str, Any]:
+    require_payment_writes()
     return await service.verify_chapa_tx(tx_ref=body.tx_ref)
 
 

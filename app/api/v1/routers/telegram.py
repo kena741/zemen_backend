@@ -15,11 +15,17 @@ from app.api.v1.schemas.telegram import (
 )
 from app.config import settings
 from app.core.services import telegram_service
+from app.persistence.repositories.telegram_repo import TelegramRepository
 from app.persistence.sqlalchemy.deps import get_db
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/telegram", tags=["Telegram"])
+
+
+def get_telegram_repo(db: Annotated[AsyncSession, Depends(get_db)]) -> TelegramRepository:
+    """Dependency providing TelegramRepository instance."""
+    return TelegramRepository(db)
 
 
 async def verify_telegram_secret_token(
@@ -61,14 +67,14 @@ async def verify_telegram_secret_token(
 )
 async def receive_telegram_webhook(
     update_payload: TelegramWebhookUpdate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    repo: Annotated[TelegramRepository, Depends(get_telegram_repo)],
 ) -> TelegramWebhookResponse:
     """
     Receives Telegram updates. Specifically tracks `chat_member` updates
     to count and credit group/channel member additions and invite link joins.
     """
     try:
-        result = await telegram_service.process_telegram_webhook_update(db, update_payload)
+        result = await telegram_service.process_telegram_webhook_update(repo, update_payload)
         logger.debug("Processed Telegram update %d: %s", update_payload.update_id, result)
         return TelegramWebhookResponse(ok=True)
     except Exception as exc:
@@ -85,12 +91,12 @@ async def receive_telegram_webhook(
     summary="List all tracked Telegram chats, groups, and channels with member & invite counts",
 )
 async def list_telegram_chats(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    repo: Annotated[TelegramRepository, Depends(get_telegram_repo)],
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> list[TelegramChatOut]:
     """Lists all groups and channels the bot has been added to or received events from."""
-    return await telegram_service.list_chats(db, limit=limit, offset=offset)
+    return await telegram_service.list_chats(repo, limit=limit, offset=offset)
 
 
 @router.get(
@@ -101,9 +107,9 @@ async def list_telegram_chats(
 )
 async def get_telegram_chat(
     chat_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    repo: Annotated[TelegramRepository, Depends(get_telegram_repo)],
 ) -> TelegramChatOut:
-    chat = await telegram_service.get_chat(db, chat_id=chat_id)
+    chat = await telegram_service.get_chat(repo, chat_id=chat_id)
     if not chat:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -120,10 +126,10 @@ async def get_telegram_chat(
 )
 async def get_chat_leaderboard(
     chat_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    repo: Annotated[TelegramRepository, Depends(get_telegram_repo)],
     limit: int = Query(20, ge=1, le=100),
 ) -> list[TelegramLeaderboardEntry]:
-    return await telegram_service.get_chat_leaderboard(db, chat_id=chat_id, limit=limit)
+    return await telegram_service.get_chat_leaderboard(repo, chat_id=chat_id, limit=limit)
 
 
 @router.get(
@@ -135,9 +141,9 @@ async def get_chat_leaderboard(
 async def get_user_invite_stats(
     chat_id: int,
     user_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    repo: Annotated[TelegramRepository, Depends(get_telegram_repo)],
 ) -> TelegramInviteStatOut:
-    stat = await telegram_service.get_user_invite_stats(db, chat_id=chat_id, user_id=user_id)
+    stat = await telegram_service.get_user_invite_stats(repo, chat_id=chat_id, user_id=user_id)
     if not stat:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

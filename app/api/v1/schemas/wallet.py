@@ -1,12 +1,17 @@
+"""Pydantic schemas for Wallet ledger, balances, payout methods, and withdrawals."""
+
+from __future__ import annotations
+
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import Field
 
-from app.api.v1.schemas.common import APIModel
+from app.api.v1.schemas.base import MobileApiSchema
 
 
-class WalletTransactionOut(APIModel):
+class WalletTransactionOut(MobileApiSchema):
     id: UUID
     amount: str | None = None
     created_date: datetime | None = Field(default=None, serialization_alias="createdDate")
@@ -16,13 +21,13 @@ class WalletTransactionOut(APIModel):
     transaction_id: str | None = Field(default=None, serialization_alias="transactionId")
     type: str | None = None
     user_id: UUID | None = Field(default=None, serialization_alias="userId")
-    provider_id: UUID | None = None
-    customer_id: UUID | None = None
+    provider_id: UUID | None = Field(default=None, serialization_alias="providerId")
+    customer_id: UUID | None = Field(default=None, serialization_alias="customerId")
 
 
-class WithdrawalOut(APIModel):
+class WithdrawalOut(MobileApiSchema):
     id: UUID
-    amount: str | None = None
+    amount: str | float | Decimal | None = None
     created_date: datetime | None = Field(default=None, serialization_alias="createdDate")
     note: str | None = None
     payment_status: str | None = Field(default=None, serialization_alias="paymentStatus")
@@ -31,3 +36,24 @@ class WithdrawalOut(APIModel):
     bank_name: str | None = Field(default=None, serialization_alias="bankName")
     account_number: str | None = Field(default=None, serialization_alias="accountNumber")
     rejection_reason: str | None = Field(default=None, serialization_alias="rejectionReason")
+
+
+class WalletBalanceOut(MobileApiSchema):
+    balance: float
+    currency: str = "ETB"
+
+
+class ProviderPaymentMethodOut(MobileApiSchema):
+    id: UUID
+    provider_id: UUID = Field(serialization_alias="providerId")
+    bank_name: str | None = Field(default=None, serialization_alias="bankName")
+    account_number: str | None = Field(default=None, serialization_alias="accountNumber")
+    holder_name: str | None = Field(default=None, serialization_alias="holderName")
+    is_default: bool = Field(default=False, serialization_alias="isDefault")
+    is_active: bool = Field(default=True, serialization_alias="isActive")
+
+
+class ProviderPaymentMethodCreate(MobileApiSchema):
+    bank_name: str = Field(alias="bankName")
+    account_number: str = Field(alias="accountNumber")
+    holder_name: str | None = Field(default=None, alias="holderName")

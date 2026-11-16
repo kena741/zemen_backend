@@ -3,13 +3,62 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.schemas.chat import ChatBulkResult, ChatInboxOut, ChatMessageOut, ChatSendBody
+from app.api.v1.schemas.chat import (
+    ChatBulkResult,
+    ChatInboxOut,
+    ChatMessageOut,
+    ChatMessageSend,
+    ChatSendBody,
+)
 from app.api.v1.schemas.common import Page, PageMeta
 from app.core.security.deps import RequireAuth
-from app.core.services import chat_service
+from app.core.services.chat_service import ChatService
+from app.persistence.repositories.chat_repo import ChatRepository
 from app.persistence.sqlalchemy.deps import get_db
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
+
+
+def get_chat_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ChatService:
+    return ChatService(ChatRepository(db))
+
+
+@router.get(
+    "/unread/count",
+    summary="Get total unread incoming messages count",
+)
+async def get_unread_count(
+    ctx: RequireAuth,
+    service: Annotated[ChatService, Depends(get_chat_service)],
+) -> dict[str, int]:
+    actor_id = str(ctx.customer_id or ctx.provider_id or ctx.user_id)
+    cnt = await service.get_unread_count(actor_id)
+    return {"unreadCount": cnt}
+
+
+@router.post(
+    "/send",
+    response_model=ChatMessageOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Send a chat message to a recipient",
+)
+async def send_chat_message(
+    body: ChatMessageSend,
+    ctx: RequireAuth,
+    service: Annotated[ChatService, Depends(get_chat_service)],
+) -> ChatMessageOut:
+    actor_id = str(ctx.customer_id or ctx.provider_id or ctx.user_id)
+    msg = await service.send_message(
+        sender_id=actor_id,
+        receiver_id=body.receiver_id,
+        message=body.message,
+        media_url=body.media_url,
+        msg_type=body.type or "text",
+        chat_id=body.chat_id,
+    )
+    return ChatMessageOut.model_validate(msg)
 
 
 @router.get(
@@ -20,11 +69,12 @@ router = APIRouter(prefix="/chats", tags=["Chats"])
 )
 async def list_inbox(
     ctx: RequireAuth,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> Page[ChatInboxOut]:
-    rows = await chat_service.list_inbox(db, ctx=ctx, limit=limit, offset=offset)
+    actor_id = str(ctx.customer_id or ctx.provider_id or ctx.user_id)
+    rows = await service.list_inbox(user_id=actor_id, limit=limit, offset=offset)
     return Page(
         items=[ChatInboxOut.model_validate(r) for r in rows],
         meta=PageMeta(limit=limit, offset=offset),
@@ -40,11 +90,12 @@ async def list_inbox(
 async def list_messages(
     peer_id: str,
     ctx: RequireAuth,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> Page[ChatMessageOut]:
-    rows = await chat_service.list_messages(db, ctx=ctx, peer_id=peer_id, limit=limit, offset=offset)
+    actor_id = str(ctx.customer_id or ctx.provider_id or ctx.user_id)
+    rows = await service.list_conversation(user_id=actor_id, peer_id=peer_id, limit=limit, offset=offset)
     return Page(
         items=[ChatMessageOut.model_validate(r) for r in rows],
         meta=PageMeta(limit=limit, offset=offset),
@@ -62,13 +113,12 @@ async def send_message(
     peer_id: str,
     body: ChatSendBody,
     ctx: RequireAuth,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
 ) -> ChatMessageOut:
-    row = await chat_service.send_message(
-        db,
-        ctx=ctx,
-        peer_id=peer_id,
-        sender_id=body.sender_id,
+    actor_id = str(ctx.customer_id or ctx.provider_id or ctx.user_id)
+    row = await service.send_message(
+        sender_id=actor_id,
+        receiver_id=peer_id,
         message=body.message,
         media_url=body.media_url,
         msg_type=body.type,
@@ -86,10 +136,11 @@ async def send_message(
 async def mark_seen(
     peer_id: str,
     ctx: RequireAuth,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
 ) -> ChatBulkResult:
-    count = await chat_service.mark_seen(db, ctx=ctx, peer_id=peer_id)
-    return ChatBulkResult(count=count)
+    actor_id = str(ctx.customer_id or ctx.provider_id or ctx.user_id)
+    await service.mark_seen(user_id=actor_id, peer_id=peer_id)
+    return ChatBulkResult(count=1)
 
 
 @router.delete(
@@ -102,9 +153,10 @@ async def delete_message(
     peer_id: str,
     chat_id: str,
     ctx: RequireAuth,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
 ) -> ChatBulkResult:
-    await chat_service.delete_message(db, ctx=ctx, peer_id=peer_id, chat_id=chat_id)
+    actor_id = str(ctx.customer_id or ctx.provider_id or ctx.user_id)
+    await service.delete_message(user_id=actor_id, peer_id=peer_id, chat_id=chat_id)
     return ChatBulkResult(count=1)
 
 
@@ -117,7 +169,8 @@ async def delete_message(
 async def clear_conversation(
     peer_id: str,
     ctx: RequireAuth,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[ChatService, Depends(get_chat_service)],
 ) -> ChatBulkResult:
-    count = await chat_service.clear_conversation(db, ctx=ctx, peer_id=peer_id)
+    actor_id = str(ctx.customer_id or ctx.provider_id or ctx.user_id)
+    count = await service.clear_conversation(user_id=actor_id, peer_id=peer_id)
     return ChatBulkResult(count=count)

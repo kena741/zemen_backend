@@ -51,6 +51,16 @@ class SubCategoryRepository(BaseRepository[SubCategory, SubCategoryDomain]):
             for sc, c_name in subcats
         ]
 
+    async def list_by_category_id(self, category_id: UUID) -> list[SubCategoryDomain]:
+        stmt = (
+            select(self.model, Category.category_name.label("category_name"))
+            .outerjoin(Category, self.model.category_id == Category.id)
+            .where(self.model.category_id == category_id)
+            .order_by(self.model.sub_category_name.asc())
+        )
+        res = await self.session.execute(stmt)
+        return [self.to_domain(sc, category_name=c_name) for sc, c_name in res.all()]
+
     async def get_by_id_enriched(self, subcat_id: UUID) -> SubCategoryDomain | None:
         stmt = (
             select(self.model, Category.category_name.label("category_name"))

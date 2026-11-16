@@ -127,3 +127,14 @@ class ProviderPaymentMethodRepository(BaseRepository[ProviderPaymentMethod, Prov
         await self.session.flush()
         return self.to_domain(new_method)
 
+    async def delete_payment_method(self, provider_id: UUID, method_id: UUID) -> bool:
+        stmt = (
+            update(self.model)
+            .where(self.model.id == method_id, self.model.provider_id == provider_id)
+            .values(is_active=False)
+        )
+        res = await self.session.execute(stmt)
+        await self.session.commit()
+        return bool(res.rowcount and res.rowcount > 0)
+
+

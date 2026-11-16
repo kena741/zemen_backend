@@ -176,3 +176,36 @@ class VerifyDocumentRepository(BaseRepository[VerifyDocument, VerifyDocumentDoma
         )
         res = await self.session.execute(stmt)
         return [row[0] for row in res.all()]
+
+    async def list_by_provider(self, provider_id: UUID) -> list[VerifyDocumentDomain]:
+        stmt = (
+            select(
+                VerifyDocument,
+                Document.name.label("document_name"),
+                SubCategory.sub_category_name.label("sub_category_name"),
+            )
+            .outerjoin(Document, VerifyDocument.document_id == Document.id)
+            .outerjoin(SubCategoryDocument, SubCategoryDocument.document_id == Document.id)
+            .outerjoin(SubCategory, SubCategory.id == SubCategoryDocument.sub_category_id)
+            .where(VerifyDocument.provider_id == provider_id)
+            .order_by(VerifyDocument.created_at.desc())
+        )
+        res = await self.session.execute(stmt)
+        seen: set[UUID] = set()
+        items: list[VerifyDocumentDomain] = []
+        for vd, doc_name, sub_cat_name in res.all():
+            if vd.id in seen:
+                continue
+            seen.add(vd.id)
+            items.append(self.to_domain(vd, document_name=doc_name, sub_category_name=sub_cat_name))
+        return items
+
+    async def delete_by_provider_and_doc_id(self, provider_id: UUID, doc_id: UUID) -> bool:
+        stmt = (
+            delete(self.model)
+            .where(self.model.provider_id == provider_id)
+            .where((self.model.id == doc_id) | (self.model.document_id == doc_id))
+        )
+        res = await self.session.execute(stmt)
+        await self.session.flush()
+        return res.rowcount > 0

@@ -1,40 +1,60 @@
+"""Pydantic schemas for Realtime Chat and Inboxes."""
+
+from __future__ import annotations
+
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import Field
 
-from app.api.v1.schemas.common import APIModel
+from app.api.v1.schemas.base import MobileApiSchema
 
 
-class ChatMessageOut(APIModel):
+class ChatMessageOut(MobileApiSchema):
     chat_id: str = Field(serialization_alias="chatID")
-    type: str | None = None
     sender_id: str = Field(serialization_alias="senderId")
     receiver_id: str = Field(serialization_alias="receiverId")
     message: str | None = None
     media_url: str | None = Field(default=None, serialization_alias="mediaUrl")
-    seen: bool | None = None
-    timestamp: datetime | None = None
+    seen: bool = False
+    type: str | None = "text"
+    timestamp: datetime
 
 
-class ChatInboxOut(APIModel):
+class ChatInboxOut(MobileApiSchema):
     id: str
+    sender_id: str = Field(serialization_alias="senderId")
+    receiver_id: str = Field(serialization_alias="receiverId")
     last_message: str | None = Field(default=None, serialization_alias="lastMessage")
     media_url: str | None = Field(default=None, serialization_alias="mediaUrl")
-    sender_id: str = Field(serialization_alias="senderId")
-    receiver_id: str = Field(serialization_alias="receiverId")
-    seen: bool | None = None
-    type: str | None = None
-    timestamp: datetime | None = None
-    archive: bool | None = None
+    seen: bool = False
+    type: str | None = "text"
+    timestamp: datetime
+    archive: bool = False
+    peer_name: str | None = Field(default=None, serialization_alias="peerName")
+    peer_image: str | None = Field(default=None, serialization_alias="peerImage")
 
 
-class ChatSendBody(APIModel):
-    sender_id: str | None = Field(default=None, alias="senderId")
+class ChatMessageSend(MobileApiSchema):
+    receiver_id: str = Field(alias="receiverId")
     message: str | None = None
     media_url: str | None = Field(default=None, alias="mediaUrl")
-    type: str = "text"
+    type: str | None = "text"
     chat_id: str | None = Field(default=None, alias="chatID")
 
 
-class ChatBulkResult(APIModel):
+class MarkSeenBody(MobileApiSchema):
+    peer_id: str = Field(alias="peerId")
+
+
+class ChatSendBody(MobileApiSchema):
+    message: str | None = None
+    media_url: str | None = Field(default=None, alias="mediaUrl")
+    type: str = "text"
+    sender_id: str | None = Field(default=None, alias="senderId")
+    chat_id: str | None = Field(default=None, alias="chatID")
+
+
+class ChatBulkResult(MobileApiSchema):
     count: int
+

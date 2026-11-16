@@ -50,6 +50,86 @@ class CustomerRepository(BaseRepository[Customer, CustomerDomain]):
             archived_at=entity.archived_at,
         )
 
+    def to_model(self, domain: CustomerDomain) -> Customer:
+        now = datetime.now(timezone.utc)
+        return Customer(
+            id=domain.id,
+            user_id=domain.user_id,
+            first_name=domain.first_name,
+            last_name=domain.last_name,
+            phone=domain.phone,
+            email=domain.email.lower().strip() if domain.email else None,
+            country_code=domain.country_code or "+251",
+            user_name=domain.user_name,
+            profile_pic=domain.profile_pic,
+            fcm_token=domain.fcm_token,
+            login_type=domain.login_type or "app",
+            wallet_amount=Decimal(str(domain.wallet_amount or 0.0)),
+            active=domain.active if domain.active is not None else True,
+            slug=domain.slug,
+            address=domain.address,
+            default_address=domain.default_address,
+            customer_addresses=domain.customer_addresses,
+            signup_source=domain.signup_source or "mobile",
+            admin_note=domain.admin_note,
+            created_at=domain.created_at or now,
+            updated_at=domain.updated_at or now,
+            archived_at=domain.archived_at,
+        )
+
+    async def get_by_user_id(self, user_id: UUID) -> CustomerDomain | None:
+        stmt = (
+            select(self.model)
+            .where(self.model.user_id == user_id)
+            .where(self.model.archived_at.is_(None))
+        )
+        res = await self.session.execute(stmt)
+        entity = res.scalar_one_or_none()
+        return self.to_domain(entity) if entity else None
+
+    async def create_customer(self, domain: CustomerDomain) -> CustomerDomain:
+        entity = self.to_model(domain)
+        self.session.add(entity)
+        await self.session.flush()
+        return self.to_domain(entity)
+
+    async def update_fcm_token(self, customer_id: UUID, fcm_token: str) -> None:
+        stmt = (
+            update(self.model)
+            .where(self.model.id == customer_id)
+            .values(fcm_token=fcm_token, updated_at=datetime.now(timezone.utc))
+        )
+        await self.session.execute(stmt)
+        await self.session.flush()
+
+    async def update_customer(self, customer_id: UUID, values: dict[str, Any]) -> CustomerDomain | None:
+        clean = {k: v for k, v in values.items() if hasattr(self.model, k) and v is not None}
+        if "phone" in clean:
+            from app.core.utils.phone import normalize_ethiopian_phone
+            clean["phone"] = normalize_ethiopian_phone(clean["phone"])
+        clean["updated_at"] = datetime.now(timezone.utc)
+        stmt = (
+            update(self.model)
+            .where(self.model.id == customer_id)
+            .where(self.model.archived_at.is_(None))
+            .values(**clean)
+            .returning(self.model)
+        )
+        res = await self.session.execute(stmt)
+        await self.session.flush()
+        updated = res.scalar_one_or_none()
+        return self.to_domain(updated) if updated else None
+
+    async def is_phone_registered(self, phone: str, exclude_id: UUID | None = None) -> bool:
+        from app.core.utils.phone import get_phone_search_variants
+        variants = get_phone_search_variants(phone)
+        stmt = select(func.count(self.model.id)).where(self.model.phone.in_(variants))
+        if exclude_id is not None:
+            stmt = stmt.where(self.model.id != exclude_id)
+        res = await self.session.execute(stmt)
+        count = res.scalar_one() or 0
+        return int(count) > 0
+
     async def list_customers(
         self,
         include_archived: bool = True,
@@ -80,8 +160,13 @@ class CustomerRepository(BaseRepository[Customer, CustomerDomain]):
         return self.to_domain(entity) if entity else None
 
     async def get_by_phone(self, phone: str) -> CustomerDomain | None:
-        clean = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
-        stmt = select(self.model).where(self.model.phone == clean)
+        from app.core.utils.phone import get_phone_search_variants
+        variants = get_phone_search_variants(phone)
+        stmt = (
+            select(self.model)
+            .where(self.model.phone.in_(variants))
+            .where(self.model.archived_at.is_(None))
+        )
         res = await self.session.execute(stmt)
         entity = res.scalar_one_or_none()
         return self.to_domain(entity) if entity else None

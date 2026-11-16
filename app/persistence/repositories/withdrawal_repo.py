@@ -167,3 +167,33 @@ class WithdrawalRepository(BaseRepository[WithdrawalHistory, WithdrawalDomain]):
         res = await self.session.execute(stmt)
         return int(res.scalar_one() or 0)
 
+    async def create_withdrawal(
+        self,
+        provider_id: UUID,
+        amount: float,
+        payment_method_id: str | None = None,
+        note: str | None = None,
+        bank_name: str | None = None,
+        account_number: str | None = None,
+        holder_name: str | None = None,
+    ) -> WithdrawalDomain:
+        from uuid import uuid4
+        now = datetime.now(timezone.utc)
+        entity = WithdrawalHistory(
+            id=uuid4(),
+            provider_id=provider_id,
+            amount=str(amount),
+            payment_status="pending",
+            note=note,
+            payment_method_id=payment_method_id,
+            bank_name=bank_name,
+            account_number=account_number,
+            holder_name=holder_name,
+            created_date=now,
+        )
+        self.session.add(entity)
+        await self.session.commit()
+        await self.session.refresh(entity)
+        return self.to_domain(entity)
+
+

@@ -3,10 +3,10 @@ from uuid import UUID
 
 from pydantic import Field
 
-from app.api.v1.schemas.common import APIModel
+from app.api.v1.schemas.base import MobileApiSchema
 
 
-class HandymanOut(APIModel):
+class HandymanOut(MobileApiSchema):
     id: UUID
     provider_id: UUID | None = None
     user_id: UUID | None = None
@@ -23,7 +23,7 @@ class HandymanOut(APIModel):
     created_at: datetime | None = Field(default=None, serialization_alias="createdAt")
 
 
-class HandymanCreate(APIModel):
+class HandymanCreate(MobileApiSchema):
     first_name: str | None = Field(default=None, alias="firstName")
     last_name: str | None = Field(default=None, alias="lastName")
     user_name: str | None = Field(default=None, alias="userName")
@@ -33,10 +33,12 @@ class HandymanCreate(APIModel):
     address: str | None = None
     active: bool | None = True
     is_active: bool | None = Field(default=True, alias="isActive")
+    category_id: UUID | None = Field(default=None, alias="categoryId")
+    sub_category_id: UUID | None = Field(default=None, alias="subCategoryId")
     slug: str | None = None
 
 
-class HandymanPatch(APIModel):
+class HandymanPatch(MobileApiSchema):
     first_name: str | None = Field(default=None, alias="firstName")
     last_name: str | None = Field(default=None, alias="lastName")
     user_name: str | None = Field(default=None, alias="userName")
@@ -46,4 +48,6 @@ class HandymanPatch(APIModel):
     address: str | None = None
     active: bool | None = None
     is_active: bool | None = Field(default=None, alias="isActive")
+    category_id: UUID | None = Field(default=None, alias="categoryId")
+    sub_category_id: UUID | None = Field(default=None, alias="subCategoryId")
     slug: str | None = None

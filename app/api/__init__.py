@@ -25,8 +25,10 @@ async def lifespan(app: FastAPI):
 
 def register_router(app: FastAPI) -> FastAPI:
     from app.api.v1 import api_v1_router
+    from app.api.v1.routers.auth import sms_compat_router
 
     app.include_router(api_v1_router)
+    app.include_router(sms_compat_router)
     return app
 
 

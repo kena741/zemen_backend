@@ -42,3 +42,28 @@ async def test_customer_repo_to_domain():
     assert domain.wallet_amount == 1200.50
     assert domain.admin_note == "VIP customer"
 
+
+@pytest.mark.asyncio
+async def test_customer_repo_update_and_phone_check():
+    cust_id = uuid4()
+    now = datetime.now(timezone.utc)
+    entity = Customer(
+        id=cust_id,
+        user_id=uuid4(),
+        first_name="Tigist",
+        last_name="Assefa",
+        phone="+251911445566",
+        active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    session = RepoMockSession(scalar_one_or_none_value=entity)
+    repo = CustomerRepository(session)
+
+    updated = await repo.update_customer(cust_id, {"first_name": "Tigist Updated"})
+    assert updated is not None
+    assert updated.first_name == "Tigist"
+
+    is_reg = await repo.is_phone_registered("0911445566")
+    assert is_reg is True
+

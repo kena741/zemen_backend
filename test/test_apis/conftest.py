@@ -10,6 +10,12 @@ from fastapi.testclient import TestClient
 
 from app.api import create_app
 from app.core.security.admin_deps import AdminContext, get_admin_context
+from app.core.security.deps import (
+    AuthContext,
+    get_auth_context,
+    require_customer_profile,
+    require_provider_profile,
+)
 from app.persistence.sqlalchemy.deps import get_db
 
 
@@ -57,12 +63,18 @@ def api_client():
 
     def _make_client(
         admin_context: AdminContext | None = None,
+        auth_context: AuthContext | None = None,
         db_session: Any | None = None,
     ) -> TestClient:
         app = create_app()
 
         if admin_context is not None:
             app.dependency_overrides[get_admin_context] = lambda: admin_context
+
+        if auth_context is not None:
+            app.dependency_overrides[get_auth_context] = lambda: auth_context
+            app.dependency_overrides[require_customer_profile] = lambda: auth_context
+            app.dependency_overrides[require_provider_profile] = lambda: auth_context
 
         if db_session is not None:
             async def _override_db():

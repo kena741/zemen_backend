@@ -29,11 +29,11 @@ class SubCategoryDomain:
 @dataclass
 class ServiceDomain:
     id: UUID
-    provider_id: UUID
-    service_name: str
-    category_id: UUID
-    sub_category_id: UUID
-    price: float
+    provider_id: UUID | None = None
+    service_name: str = ""
+    category_id: UUID | None = None
+    sub_category_id: UUID | None = None
+    price: float = 0.0
     type: str = "fixed"
     service_location_mode: str = "on_site"
     description: str | None = None
@@ -51,9 +51,15 @@ class ServiceDomain:
     duration: str | None = None
     is_archived: bool | None = False
     approved: bool = False
+    allows_custom_offer: bool = False
     feature_requested_status: str | None = "none"
     feature_requested_at: datetime | None = None
     provider_name: str | None = None
     provider_email: str | None = None
+    liked_user: list[str] = field(default_factory=list)
+    review_count: int = 0
+    review_sum: float = 0.0
+    position: dict | None = None
+    location: dict | None = None
     created_at: datetime | None = None
 

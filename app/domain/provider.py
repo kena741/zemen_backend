@@ -57,6 +57,30 @@ class ProviderDomain:
 
 
 @dataclass
+class HandymanDomain:
+    id: UUID
+    provider_id: UUID | None = None
+    user_id: UUID | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    email: str | None = None
+    phone_number: str | None = None
+    user_name: str | None = None
+    profile_image: str | None = None
+    active: bool = True
+    created_at: datetime | None = None
+    category_id: UUID | None = None
+    sub_category_id: UUID | None = None
+    address: str | None = None
+    fcm_token: str | None = None
+
+    @property
+    def full_name(self) -> str:
+        parts = [p for p in (self.first_name, self.last_name) if p]
+        return " ".join(parts) if parts else (self.user_name or "Handyman")
+
+
+@dataclass
 class CompanyDomain:
     id: UUID
     provider_id: UUID

@@ -1,23 +1,29 @@
+"""Pydantic schemas for Customer Reviews."""
+
+from __future__ import annotations
+
 from datetime import datetime
 from uuid import UUID
 
 from pydantic import Field
 
-from app.api.v1.schemas.common import APIModel
+from app.api.v1.schemas.base import MobileApiSchema
 
 
-class ReviewOut(APIModel):
+class ReviewOut(MobileApiSchema):
     id: UUID
     comment: str
+    rating: float
     customer_id: UUID | None = Field(default=None, serialization_alias="customerId")
-    date: datetime | None = None
-    rating: str | None = None
     service_id: UUID | None = Field(default=None, serialization_alias="serviceId")
     booking_id: UUID | None = Field(default=None, serialization_alias="bookingId")
+    date: datetime
+    customer_name: str | None = Field(default=None, serialization_alias="customerName")
+    customer_image: str | None = Field(default=None, serialization_alias="customerImage")
 
 
-class ReviewCreate(APIModel):
-    comment: str
-    rating: str | None = None
+class ReviewCreate(MobileApiSchema):
     service_id: UUID | None = Field(default=None, alias="serviceId")
     booking_id: UUID | None = Field(default=None, alias="bookingId")
+    rating: float
+    comment: str

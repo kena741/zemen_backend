@@ -2,20 +2,22 @@ from uuid import UUID
 
 from pydantic import Field
 
-from app.api.v1.schemas.common import APIModel
+from app.api.v1.schemas.base import MobileApiSchema
 
 
-class RejectBookingBody(APIModel):
+class RejectBookingBody(MobileApiSchema):
     reason: str | None = None
 
 
-class AssignHandymanBody(APIModel):
+class AssignHandymanBody(MobileApiSchema):
     handyman_id: UUID = Field(alias="handymanId")
 
 
-class SetBookingStatusBody(APIModel):
+class SetBookingStatusBody(MobileApiSchema):
     status: str
+    reason: str | None = None
+    otp: str | None = None
 
 
-class CancelBookingBody(APIModel):
+class CancelBookingBody(MobileApiSchema):
     reason: str | None = None

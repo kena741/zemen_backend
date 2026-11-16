@@ -21,4 +21,9 @@ class JobRequestDomain:
     provider_id: UUID | None = None
     customer_display_name: str | None = None
     customer_display_phone: str | None = None
+    bid_list: list[dict[str, Any]] = field(default_factory=list)
+    bid_price: str | None = None
+    handyman_id: str | None = None
+    service_id: UUID | None = None
+    service_model_list: list[dict[str, Any]] = field(default_factory=list)
 

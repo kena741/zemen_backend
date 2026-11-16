@@ -67,3 +67,28 @@ class WalletTransactionRepository(BaseRepository[WalletTransaction, EnrichedWall
             )
         return items
 
+    async def list_for_actor(
+        self,
+        user_id: UUID | None = None,
+        customer_id: UUID | None = None,
+        provider_id: UUID | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[EnrichedWalletTransactionDomain]:
+        from sqlalchemy import or_
+        clauses = []
+        if user_id:
+            clauses.append(WalletTransaction.user_id == user_id)
+        if customer_id:
+            clauses.append(WalletTransaction.customer_id == customer_id)
+        if provider_id:
+            clauses.append(WalletTransaction.provider_id == provider_id)
+
+        stmt = select(WalletTransaction)
+        if clauses:
+            stmt = stmt.where(or_(*clauses))
+        stmt = stmt.order_by(WalletTransaction.created_date.desc().nullslast()).limit(limit).offset(offset)
+        res = await self.session.execute(stmt)
+        return [self.to_domain(tx) for tx in res.scalars().all()]
+
+

@@ -59,6 +59,104 @@ class ProviderRepository(BaseRepository[Provider, ProviderDomain]):
             archived_at=entity.archived_at,
         )
 
+    def to_model(self, domain: ProviderDomain) -> Provider:
+        now = datetime.now(timezone.utc)
+        return Provider(
+            id=domain.id,
+            user_id=domain.user_id,
+            email=domain.email.lower().strip() if domain.email else None,
+            first_name=domain.first_name,
+            last_name=domain.last_name,
+            user_name=domain.user_name,
+            phone_number=domain.phone_number,
+            profile_image=domain.profile_image,
+            banner=domain.banner,
+            address=domain.address,
+            country=domain.country,
+            country_code=domain.country_code or "+251",
+            currency=domain.currency or "ETB",
+            location=domain.location,
+            slug=domain.slug,
+            user_type=domain.user_type or "provider",
+            wallet_amount=str(domain.wallet_amount or "0"),
+            active=domain.active,
+            fcm_token=domain.fcm_token,
+            social_links=domain.social_links if isinstance(domain.social_links, dict) else {},
+            activation_paid=domain.activation_paid,
+            activation_paid_at=domain.activation_paid_at,
+            activation_tx_ref=domain.activation_tx_ref,
+            provider_type=domain.provider_type or "individual",
+            company_verification_status=domain.company_verification_status or "not_submitted",
+            service_tier_max=domain.service_tier_max,
+            service_tier_paid_at=domain.service_tier_paid_at,
+            verified_subcategory_ids=domain.verified_subcategory_ids,
+            signup_source=domain.signup_source or "mobile",
+            profession_id=domain.profession_id,
+            category_id=domain.category_id,
+            company_license_url=domain.company_license_url,
+            company_rejection_reason=domain.company_rejection_reason,
+            service_tier_tx_ref=domain.service_tier_tx_ref,
+            admin_note=domain.admin_note,
+            created_at=domain.created_at or now,
+            updated_at=domain.updated_at or now,
+            archived_at=domain.archived_at,
+        )
+
+    async def get_by_user_id(self, user_id: UUID) -> ProviderDomain | None:
+        stmt = (
+            select(self.model)
+            .where(self.model.user_id == user_id)
+            .where(self.model.archived_at.is_(None))
+        )
+        res = await self.session.execute(stmt)
+        entity = res.scalar_one_or_none()
+        return self.to_domain(entity) if entity else None
+
+    async def get_by_phone(self, phone: str) -> ProviderDomain | None:
+        from app.core.utils.phone import get_phone_search_variants
+        variants = get_phone_search_variants(phone)
+        stmt = (
+            select(self.model)
+            .where(self.model.phone_number.in_(variants))
+            .where(self.model.archived_at.is_(None))
+        )
+        res = await self.session.execute(stmt)
+        entity = res.scalar_one_or_none()
+        return self.to_domain(entity) if entity else None
+
+    async def create_provider(self, domain: ProviderDomain) -> ProviderDomain:
+        entity = self.to_model(domain)
+        self.session.add(entity)
+        await self.session.flush()
+        return self.to_domain(entity)
+
+    async def update_fcm_token(self, provider_id: UUID, fcm_token: str) -> None:
+        stmt = (
+            update(self.model)
+            .where(self.model.id == provider_id)
+            .values(fcm_token=fcm_token, updated_at=datetime.now(timezone.utc))
+        )
+        await self.session.execute(stmt)
+        await self.session.flush()
+
+    async def update_provider(self, provider_id: UUID, values: dict[str, Any]) -> ProviderDomain | None:
+        clean = {k: v for k, v in values.items() if hasattr(self.model, k) and v is not None}
+        if "phone_number" in clean:
+            from app.core.utils.phone import normalize_ethiopian_phone
+            clean["phone_number"] = normalize_ethiopian_phone(clean["phone_number"])
+        clean["updated_at"] = datetime.now(timezone.utc)
+        stmt = (
+            update(self.model)
+            .where(self.model.id == provider_id)
+            .where(self.model.archived_at.is_(None))
+            .values(**clean)
+            .returning(self.model)
+        )
+        res = await self.session.execute(stmt)
+        await self.session.flush()
+        updated = res.scalar_one_or_none()
+        return self.to_domain(updated) if updated else None
+
     async def list_providers(
         self,
         include_archived: bool = True,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import timedelta
 from typing import BinaryIO
@@ -108,6 +109,78 @@ class GCSStorageService:
             blob.delete()
             return True
         return False
+
+
+    def parse_url(self, url: str) -> tuple[str, str]:
+        """Extract (bucket_name, destination_path) from a GCS public URL."""
+        clean = url.split("?")[0]
+        prefix = f"{settings.GCS_PUBLIC_URL_BASE.rstrip('/')}/"
+        if clean.startswith(prefix):
+            remainder = clean[len(prefix):]
+            parts = remainder.split("/", 1)
+            if len(parts) == 2:
+                return parts[0], parts[1]
+            return parts[0], ""
+        return settings.GCS_DEFAULT_BUCKET, clean.lstrip("/")
+
+    def delete_by_public_url(self, url: str) -> bool:
+        """Delete an object given its public URL."""
+        bucket_name, dest_path = self.parse_url(url)
+        return self.delete_file(destination_path=dest_path, bucket_name=bucket_name)
+
+    async def upload_bytes_async(
+        self,
+        data: bytes,
+        destination_path: str,
+        bucket_name: str | None = None,
+        content_type: str | None = None,
+    ) -> str:
+        """Upload raw bytes to GCS asynchronously without blocking the event loop."""
+        return await asyncio.to_thread(
+            self.upload_bytes,
+            data,
+            destination_path,
+            bucket_name,
+            content_type,
+        )
+
+    async def upload_file_stream_async(
+        self,
+        file_obj: BinaryIO,
+        destination_path: str,
+        bucket_name: str | None = None,
+        content_type: str | None = None,
+    ) -> str:
+        """Upload stream to GCS asynchronously without blocking the event loop."""
+        return await asyncio.to_thread(
+            self.upload_file_stream,
+            file_obj,
+            destination_path,
+            bucket_name,
+            content_type,
+        )
+
+    async def delete_file_async(
+        self,
+        destination_path: str,
+        bucket_name: str | None = None,
+    ) -> bool:
+        """Delete an object from GCS asynchronously."""
+        return await asyncio.to_thread(
+            self.delete_file,
+            destination_path,
+            bucket_name,
+        )
+
+    async def delete_by_public_url_async(
+        self,
+        url: str,
+    ) -> bool:
+        """Delete an object given its public URL asynchronously."""
+        return await asyncio.to_thread(
+            self.delete_by_public_url,
+            url,
+        )
 
 
 storage_service = GCSStorageService()

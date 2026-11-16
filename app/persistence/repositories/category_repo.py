@@ -29,6 +29,14 @@ class CategoryRepository(BaseRepository[Category, CategoryDomain]):
         res = await self.session.execute(stmt)
         return [self.to_domain(c) for c in res.scalars().all()]
 
+    async def list_categories(self, active_only: bool = True) -> list[CategoryDomain]:
+        stmt = select(self.model)
+        if active_only:
+            stmt = stmt.where(self.model.active.is_(True))
+        stmt = stmt.order_by(self.model.category_name.asc())
+        res = await self.session.execute(stmt)
+        return [self.to_domain(c) for c in res.scalars().all()]
+
     async def create_category(
         self,
         category_name: str,

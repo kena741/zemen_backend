@@ -29,3 +29,8 @@ class BannerRepository(BaseRepository[Banner, BannerDomain]):
         res = await self.session.execute(stmt)
         return [self.to_domain(b) for b in res.scalars().all()]
 
+    async def list_active_banners(self) -> list[BannerDomain]:
+        stmt = select(self.model).where(self.model.active.is_(True)).order_by(self.model.created_at.desc())
+        res = await self.session.execute(stmt)
+        return [self.to_domain(b) for b in res.scalars().all()]
+

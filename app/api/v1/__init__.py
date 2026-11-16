@@ -8,12 +8,15 @@ from app.api.v1.routers import (
     chats,
     config,
     customers,
+    documents,
+    handymen,
     jobs,
     notifications,
     offers,
     payments,
     providers,
     reviews,
+    storage,
     telegram,
     wallet,
 )
@@ -27,6 +30,8 @@ api_v1_router.include_router(catalog.router)
 api_v1_router.include_router(config.router)
 api_v1_router.include_router(customers.router)
 api_v1_router.include_router(providers.router)
+api_v1_router.include_router(handymen.router)
+api_v1_router.include_router(documents.router)
 api_v1_router.include_router(bookings.router)
 api_v1_router.include_router(jobs.router)
 api_v1_router.include_router(offers.router)
@@ -36,6 +41,8 @@ api_v1_router.include_router(chats.router)
 api_v1_router.include_router(telegram.router)
 api_v1_router.include_router(wallet.router)
 api_v1_router.include_router(payments.router)
+api_v1_router.include_router(storage.router, prefix="/storage", tags=["Storage"])
+api_v1_router.include_router(storage.router, prefix="/media", tags=["Media"])
 api_v1_router.include_router(admin.router)
 
 

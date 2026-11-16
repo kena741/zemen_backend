@@ -4,10 +4,10 @@ from uuid import UUID
 
 from pydantic import Field
 
-from app.api.v1.schemas.common import APIModel
+from app.api.v1.schemas.base import MobileApiSchema
 
 
-class ProviderOut(APIModel):
+class ProviderOut(MobileApiSchema):
     id: UUID
     user_id: UUID
     email: str | None = None
@@ -34,10 +34,10 @@ class ProviderOut(APIModel):
     company_license_url: str | None = None
     company_rejection_reason: str | None = None
     location: Any | None = None
-    created_at: datetime = Field(serialization_alias="createdAt")
+    created_at: datetime | None = Field(default=None, serialization_alias="createdAt")
 
 
-class ProviderPatch(APIModel):
+class ProviderPatch(MobileApiSchema):
     first_name: str | None = Field(default=None, alias="firstName")
     last_name: str | None = Field(default=None, alias="lastName")
     user_name: str | None = Field(default=None, alias="userName")
@@ -59,7 +59,7 @@ class ProviderCreate(ProviderPatch):
     provider_type: Literal["individual", "company"] | None = Field(default=None, alias="providerType")
 
 
-class CompanyOut(APIModel):
+class CompanyOut(MobileApiSchema):
     id: UUID
     provider_id: UUID
     name: str
@@ -73,7 +73,7 @@ class CompanyOut(APIModel):
     banner_image: str | None = None
 
 
-class CompanyWrite(APIModel):
+class CompanyWrite(MobileApiSchema):
     name: str | None = None
     website: str | None = None
     company_name: str | None = None
@@ -85,7 +85,7 @@ class CompanyWrite(APIModel):
     banner_image: str | None = None
 
 
-class ProviderDocumentOut(APIModel):
+class ProviderDocumentOut(MobileApiSchema):
     id: UUID
     created_at: datetime = Field(serialization_alias="createdAt")
     provider_id: UUID = Field(serialization_alias="providerId")
@@ -96,18 +96,18 @@ class ProviderDocumentOut(APIModel):
     is_verify: bool | None = Field(default=None, serialization_alias="isVerify")
 
 
-class ProviderDocumentWrite(APIModel):
+class ProviderDocumentWrite(MobileApiSchema):
     document_id: UUID = Field(alias="documentId")
     document_image: str = Field(alias="documentImage")
 
 
-class ProviderDocumentsBody(APIModel):
+class ProviderDocumentsBody(MobileApiSchema):
     documents: list[ProviderDocumentWrite]
     provider_name: str | None = Field(default=None, alias="providerName")
     provider_email: str | None = Field(default=None, alias="providerEmail")
 
 
-class PaymentMethodOut(APIModel):
+class PaymentMethodOut(MobileApiSchema):
     id: UUID
     provider_id: UUID | None = Field(default=None, serialization_alias="providerID")
     method_type: str | None = None
@@ -124,7 +124,7 @@ class PaymentMethodOut(APIModel):
     currency: str | None = None
 
 
-class PaymentMethodWrite(APIModel):
+class PaymentMethodWrite(MobileApiSchema):
     method_type: str | None = None
     method_code: str | None = None
     method_name: str | None = None

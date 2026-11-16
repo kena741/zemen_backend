@@ -1,13 +1,15 @@
+import asyncio
+import csv
 from datetime import datetime, timezone
+import io
 import logging
 from typing import Any
 
 import httpx
-from sqlalchemy import func, select, update
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.schemas.telegram import (
+    CallbackQueryPayload,
     ChatMemberUpdatedPayload,
     TelegramChatOut,
     TelegramLeaderboardEntry,
@@ -15,12 +17,10 @@ from app.api.v1.schemas.telegram import (
     TelegramWebhookUpdate,
 )
 from app.config import settings
+from app.persistence.repositories.telegram_repo import TelegramRepository
 from app.persistence.sqlalchemy.models.telegram import (
     TelegramChat,
-    TelegramChatMember,
-    TelegramInviteLink,
     TelegramInviteStat,
-    TelegramUser,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,13 +29,24 @@ JOIN_STATUSES = {"member", "administrator", "restricted"}
 LEAVE_STATUSES = {"left", "kicked"}
 
 
+def _resolve_repo(db_or_repo: AsyncSession | TelegramRepository) -> TelegramRepository:
+    """Helper to ensure a TelegramRepository instance is used."""
+    if isinstance(db_or_repo, TelegramRepository):
+        return db_or_repo
+    return TelegramRepository(db_or_repo)
+
+
+# =============================================================================
+# Webhook Registration & Management
+# =============================================================================
+
 async def register_webhook(
     bot_token: str | None = None,
     webhook_url: str | None = None,
     secret_token: str | None = None,
     allowed_updates: list[str] | None = None,
 ) -> TelegramWebhookRegistrationResponse:
-    """Registers the webhook with Telegram Bot API with allowed_updates=["chat_member", "my_chat_member"]."""
+    """Registers the webhook with Telegram Bot API with allowed_updates."""
     token = settings.TELEGRAM_BOT_TOKEN if bot_token is None else bot_token
     target_url = settings.TELEGRAM_WEBHOOK_URL if webhook_url is None else webhook_url
     secret = settings.TELEGRAM_WEBHOOK_SECRET if secret_token is None else secret_token
@@ -52,7 +63,7 @@ async def register_webhook(
             ok=False, description="TELEGRAM_WEBHOOK_URL is not configured"
         )
 
-    updates = allowed_updates or ["chat_member", "my_chat_member", "message"]
+    updates = allowed_updates or ["chat_member", "my_chat_member", "message", "callback_query"]
 
     url = f"https://api.telegram.org/bot{token}/setWebhook"
     payload: dict[str, Any] = {
@@ -68,7 +79,9 @@ async def register_webhook(
             resp = await client.post(url, json=payload)
             data = resp.json()
             is_ok = bool(data.get("ok", False))
-            description = data.get("description", "Webhook registered successfully" if is_ok else "Registration failed")
+            description = data.get(
+                "description", "Webhook registered successfully" if is_ok else "Registration failed"
+            )
             if is_ok:
                 logger.info(
                     "Telegram webhook registered successfully at %s with allowed_updates=%s",
@@ -113,15 +126,21 @@ async def delete_webhook(bot_token: str | None = None) -> TelegramWebhookRegistr
         return TelegramWebhookRegistrationResponse(ok=False, description=str(exc))
 
 
+# =============================================================================
+# Chat Member Updates & Invite Attribution
+# =============================================================================
+
 async def process_chat_member_updated(
-    db: AsyncSession,
+    db: AsyncSession | TelegramRepository,
     event: ChatMemberUpdatedPayload,
 ) -> dict[str, Any]:
     """
-    Parses a ChatMemberUpdated payload, records the event, and updates invite counts.
+    Parses a ChatMemberUpdated payload, records the event via TelegramRepository,
+    and updates invite counts.
     Handles both direct additions (user added another) and invite link clicks.
     Guarantees idempotency to prevent duplicate increments on rejoins.
     """
+    repo = _resolve_repo(db)
     chat_payload = event.chat
     joining_user_payload = event.new_chat_member.user
     actor_payload = event.from_user
@@ -129,73 +148,33 @@ async def process_chat_member_updated(
     new_status = event.new_chat_member.status
     event_timestamp = datetime.fromtimestamp(event.date, tz=timezone.utc)
 
-    # 1. Upsert Telegram Chat
-    chat_stmt = (
-        insert(TelegramChat)
-        .values(
+    # 1. Upsert Telegram Chat (only for group, supergroup, or channel)
+    if chat_payload.type in ("group", "supergroup", "channel"):
+        await repo.upsert_chat(
             chat_id=chat_payload.id,
             title=chat_payload.title,
             type=chat_payload.type,
             is_active=True,
         )
-        .on_conflict_do_update(
-            index_elements=[TelegramChat.chat_id],
-            set_={
-                "title": chat_payload.title,
-                "type": chat_payload.type,
-                "is_active": True,
-                "updated_at": func.now(),
-            },
-        )
-    )
-    await db.execute(chat_stmt)
 
     # 2. Upsert Joining User
-    joining_user_stmt = (
-        insert(TelegramUser)
-        .values(
-            user_id=joining_user_payload.id,
-            username=joining_user_payload.username,
-            first_name=joining_user_payload.first_name,
-            last_name=joining_user_payload.last_name,
-            is_bot=joining_user_payload.is_bot,
-        )
-        .on_conflict_do_update(
-            index_elements=[TelegramUser.user_id],
-            set_={
-                "username": joining_user_payload.username,
-                "first_name": joining_user_payload.first_name,
-                "last_name": joining_user_payload.last_name,
-                "is_bot": joining_user_payload.is_bot,
-                "updated_at": func.now(),
-            },
-        )
+    await repo.upsert_user(
+        user_id=joining_user_payload.id,
+        username=joining_user_payload.username,
+        first_name=joining_user_payload.first_name,
+        last_name=joining_user_payload.last_name,
+        is_bot=joining_user_payload.is_bot,
     )
-    await db.execute(joining_user_stmt)
 
     # 3. Upsert Actor User (if different from joining user)
     if actor_payload.id != joining_user_payload.id:
-        actor_stmt = (
-            insert(TelegramUser)
-            .values(
-                user_id=actor_payload.id,
-                username=actor_payload.username,
-                first_name=actor_payload.first_name,
-                last_name=actor_payload.last_name,
-                is_bot=actor_payload.is_bot,
-            )
-            .on_conflict_do_update(
-                index_elements=[TelegramUser.user_id],
-                set_={
-                    "username": actor_payload.username,
-                    "first_name": actor_payload.first_name,
-                    "last_name": actor_payload.last_name,
-                    "is_bot": actor_payload.is_bot,
-                    "updated_at": func.now(),
-                },
-            )
+        await repo.upsert_user(
+            user_id=actor_payload.id,
+            username=actor_payload.username,
+            first_name=actor_payload.first_name,
+            last_name=actor_payload.last_name,
+            is_bot=actor_payload.is_bot,
         )
-        await db.execute(actor_stmt)
 
     # 4. Upsert Link Creator User & Invite Link (if present)
     invite_link_str: str | None = None
@@ -206,46 +185,21 @@ async def process_chat_member_updated(
         if event.invite_link.creator:
             link_creator_payload = event.invite_link.creator
             link_creator_id = link_creator_payload.id
-            creator_stmt = (
-                insert(TelegramUser)
-                .values(
-                    user_id=link_creator_payload.id,
-                    username=link_creator_payload.username,
-                    first_name=link_creator_payload.first_name,
-                    last_name=link_creator_payload.last_name,
-                    is_bot=link_creator_payload.is_bot,
-                )
-                .on_conflict_do_update(
-                    index_elements=[TelegramUser.user_id],
-                    set_={
-                        "username": link_creator_payload.username,
-                        "first_name": link_creator_payload.first_name,
-                        "last_name": link_creator_payload.last_name,
-                        "is_bot": link_creator_payload.is_bot,
-                        "updated_at": func.now(),
-                    },
-                )
+            await repo.upsert_user(
+                user_id=link_creator_payload.id,
+                username=link_creator_payload.username,
+                first_name=link_creator_payload.first_name,
+                last_name=link_creator_payload.last_name,
+                is_bot=link_creator_payload.is_bot,
             )
-            await db.execute(creator_stmt)
 
-        link_stmt = (
-            insert(TelegramInviteLink)
-            .values(
-                invite_link=invite_link_str,
-                chat_id=chat_payload.id,
-                creator_user_id=link_creator_id,
-                name=event.invite_link.name,
-                is_primary=event.invite_link.is_primary,
-            )
-            .on_conflict_do_update(
-                index_elements=[TelegramInviteLink.invite_link],
-                set_={
-                    "name": event.invite_link.name,
-                    "is_primary": event.invite_link.is_primary,
-                },
-            )
+        await repo.upsert_invite_link(
+            invite_link=invite_link_str,
+            chat_id=chat_payload.id,
+            creator_user_id=link_creator_id,
+            name=event.invite_link.name,
+            is_primary=event.invite_link.is_primary,
         )
-        await db.execute(link_stmt)
 
     # 5. Determine the Inviter
     # Case A: Joined via invite link -> inviter is the creator of the invite link
@@ -257,23 +211,22 @@ async def process_chat_member_updated(
     elif actor_payload.id != joining_user_payload.id:
         inviter_id = actor_payload.id
 
+    # The user must actually join the group (transition from left/kicked to member/admin/restricted)
     is_joining = old_status in LEAVE_STATUSES and new_status in JOIN_STATUSES
     is_leaving = old_status in JOIN_STATUSES and new_status in LEAVE_STATUSES
 
     # 6. Check existing membership record for idempotency
-    existing_member_query = select(TelegramChatMember).where(
-        TelegramChatMember.chat_id == chat_payload.id,
-        TelegramChatMember.user_id == joining_user_payload.id,
+    existing_member = await repo.get_chat_member(
+        chat_id=chat_payload.id,
+        user_id=joining_user_payload.id,
     )
-    res = await db.execute(existing_member_query)
-    existing_member = res.scalar_one_or_none()
 
     incremented = False
 
     if is_joining:
         if existing_member is None:
             # First-time join: record membership and credit the inviter
-            new_member = TelegramChatMember(
+            await repo.record_member_join(
                 chat_id=chat_payload.id,
                 user_id=joining_user_payload.id,
                 inviter_user_id=inviter_id,
@@ -281,39 +234,26 @@ async def process_chat_member_updated(
                 status=new_status,
                 joined_at=event_timestamp,
             )
-            db.add(new_member)
 
-            if inviter_id:
-                # Atomically increment inviter stat
-                stat_stmt = (
-                    insert(TelegramInviteStat)
-                    .values(
-                        chat_id=chat_payload.id,
-                        user_id=inviter_id,
-                        total_invites=1,
-                    )
-                    .on_conflict_do_update(
-                        index_elements=[TelegramInviteStat.chat_id, TelegramInviteStat.user_id],
-                        set_={
-                            "total_invites": TelegramInviteStat.total_invites + 1,
-                            "updated_at": func.now(),
-                        },
-                    )
+            # Credit inviter only if present and the joining user is not a bot
+            if inviter_id and not joining_user_payload.is_bot:
+                await repo.increment_user_invites(
+                    chat_id=chat_payload.id,
+                    user_id=inviter_id,
                 )
-                await db.execute(stat_stmt)
                 incremented = True
 
                 # Increment link usage if joined via link
                 if invite_link_str:
-                    await db.execute(
-                        update(TelegramInviteLink)
-                        .where(TelegramInviteLink.invite_link == invite_link_str)
-                        .values(usage_count=TelegramInviteLink.usage_count + 1)
-                    )
+                    await repo.increment_link_usage(invite_link=invite_link_str)
         else:
             # Rejoining: update status and timestamp, but do NOT increment count again
             existing_member.status = new_status
-            existing_member.updated_at = func.now()
+            await repo.update_member_status(
+                chat_id=chat_payload.id,
+                user_id=joining_user_payload.id,
+                status=new_status,
+            )
             logger.info(
                 "User %d rejoined chat %d. Updated status without duplicate counter increment.",
                 joining_user_payload.id,
@@ -323,13 +263,21 @@ async def process_chat_member_updated(
     elif is_leaving:
         if existing_member:
             existing_member.status = new_status
-            existing_member.updated_at = func.now()
+            await repo.update_member_status(
+                chat_id=chat_payload.id,
+                user_id=joining_user_payload.id,
+                status=new_status,
+            )
 
     else:
-        # Other status transition (e.g., promoted to administrator, restricted permissions)
+        # Other status transition (e.g. promoted to administrator, restricted permissions)
         if existing_member:
             existing_member.status = new_status
-            existing_member.updated_at = func.now()
+            await repo.update_member_status(
+                chat_id=chat_payload.id,
+                user_id=joining_user_payload.id,
+                status=new_status,
+            )
 
     return {
         "chat_id": chat_payload.id,
@@ -341,271 +289,634 @@ async def process_chat_member_updated(
     }
 
 
-async def send_message(chat_id: int, text: str, parse_mode: str = "HTML") -> None:
+# =============================================================================
+# Telegram Bot API Client Helpers
+# =============================================================================
+
+async def send_message(
+    chat_id: int,
+    text: str,
+    parse_mode: str = "HTML",
+    reply_markup: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     """Helper to send a message to a chat using Telegram Bot API."""
     token = settings.TELEGRAM_BOT_TOKEN
     if not token:
-        return
+        return None
     url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload: dict[str, Any] = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(
-                url,
-                json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode},
-            )
+            resp = await client.post(url, json=payload)
+            return resp.json()
     except Exception as exc:
         logger.warning("Failed to send Telegram message to chat %d: %s", chat_id, exc)
+        return None
+
+
+async def edit_message_text(
+    chat_id: int,
+    message_id: int,
+    text: str,
+    parse_mode: str = "HTML",
+    reply_markup: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Edits an existing Telegram message in-place for seamless menu navigation."""
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return None
+    url = f"https://api.telegram.org/bot{token}/editMessageText"
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "parse_mode": parse_mode,
+    }
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(url, json=payload)
+            return resp.json()
+    except Exception as exc:
+        logger.warning("Failed to edit Telegram message %d in chat %d: %s", message_id, chat_id, exc)
+        return None
+
+
+async def answer_callback_query(
+    callback_query_id: str,
+    text: str | None = None,
+    show_alert: bool = False,
+) -> None:
+    """Acknowledges an inline button callback query to dismiss the Telegram loading indicator."""
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return
+    url = f"https://api.telegram.org/bot{token}/answerCallbackQuery"
+    payload: dict[str, Any] = {"callback_query_id": callback_query_id}
+    if text:
+        payload["text"] = text
+        payload["show_alert"] = show_alert
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(url, json=payload)
+    except Exception as exc:
+        logger.warning("Failed to answer callback query %s: %s", callback_query_id, exc)
+
+
+async def send_document(
+    chat_id: int,
+    filename: str,
+    content_bytes: bytes,
+    caption: str | None = None,
+) -> dict[str, Any] | None:
+    """Sends a downloadable file (e.g. CSV report) directly to a Telegram chat."""
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return None
+    url = f"https://api.telegram.org/bot{token}/sendDocument"
+    files = {"document": (filename, content_bytes, "text/csv")}
+    data = {"chat_id": str(chat_id)}
+    if caption:
+        data["caption"] = caption
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, data=data, files=files)
+            return resp.json()
+    except Exception as exc:
+        logger.warning("Failed to send Telegram document to chat %d: %s", chat_id, exc)
+        return None
+
+
+async def is_chat_admin(chat_id: int, user_id: int) -> bool:
+    """Verifies with Telegram Bot API whether a user is an administrator or creator in a chat."""
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return False
+    url = f"https://api.telegram.org/bot{token}/getChatMember"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url, params={"chat_id": chat_id, "user_id": user_id})
+            data = resp.json()
+            if not data.get("ok"):
+                return False
+            status = data.get("result", {}).get("status")
+            return status in ("creator", "administrator")
+    except Exception as exc:
+        logger.warning("Error verifying admin status for user %d in chat %d: %s", user_id, chat_id, exc)
+        return False
+
+
+async def fetch_chat_info(chat_id: int) -> dict[str, Any] | None:
+    """Fetches chat information directly from Telegram Bot API via getChat."""
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token:
+        return None
+    url = f"https://api.telegram.org/bot{token}/getChat"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url, params={"chat_id": chat_id})
+            data = resp.json()
+            if data.get("ok"):
+                return data.get("result")
+            return None
+    except Exception as exc:
+        logger.warning("Failed to fetch chat info for %d: %s", chat_id, exc)
+        return None
+
+
+async def get_admin_chats(
+    db: AsyncSession | TelegramRepository,
+    user_id: int,
+) -> list[TelegramChat]:
+    """Finds all tracked chats in which the user holds administrative permissions."""
+    repo = _resolve_repo(db)
+    all_chats = await repo.get_active_group_chats()
+    if not all_chats:
+        return []
+
+    async def _check(c: TelegramChat) -> TelegramChat | None:
+        if await is_chat_admin(chat_id=c.chat_id, user_id=user_id):
+            return c
+        return None
+
+    results = await asyncio.gather(*[_check(c) for c in all_chats], return_exceptions=True)
+    return [c for c in results if isinstance(c, TelegramChat)]
+
+
+async def generate_chat_invites_csv(
+    db: AsyncSession | TelegramRepository,
+    chat_id: int,
+) -> str:
+    """Generates a CSV report of all inviters and their invite totals in a chat."""
+    repo = _resolve_repo(db)
+    rows = await repo.get_chat_invites_for_csv(chat_id)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Rank",
+        "Telegram User ID",
+        "Username",
+        "First Name",
+        "Last Name",
+        "Total Invites",
+        "Last Invite Timestamp (UTC)",
+    ])
+    for rank, row in enumerate(rows, start=1):
+        writer.writerow([
+            rank,
+            row.user_id,
+            f"@{row.username}" if row.username else "",
+            row.first_name,
+            row.last_name or "",
+            row.total_invites,
+            row.updated_at.strftime("%Y-%m-%d %H:%M:%S") if row.updated_at else "",
+        ])
+    return output.getvalue()
+
+
+# =============================================================================
+# In-Bot Interactive Menu Builders
+# =============================================================================
+
+def build_main_menu(admin_chats: list[TelegramChat], user_first_name: str = "Admin") -> tuple[str, dict[str, Any]]:
+    """Builds the primary private-message admin menu with list of authorized groups."""
+    text = (
+        f"🛡️ <b>Zemen Bot — Admin Control Panel</b>\n\n"
+        f"Welcome, {user_first_name}! You are recognized as an administrator in the following group(s):\n\n"
+        f"Select a group below to view invite counts, leaderboards, or export data:"
+    )
+    keyboard = []
+    for chat in admin_chats:
+        title = chat.title or f"Chat {chat.chat_id}"
+        keyboard.append([{"text": f"👥 {title}", "callback_data": f"chat:{chat.chat_id}"}])
+
+    keyboard.append([
+        {"text": "🔄 Refresh", "callback_data": "menu:main"},
+        {"text": "ℹ️ About", "callback_data": "menu:about"},
+    ])
+    return text, {"inline_keyboard": keyboard}
+
+
+async def build_chat_detail_menu(
+    db: AsyncSession | TelegramRepository,
+    chat_id: int,
+) -> tuple[str, dict[str, Any]]:
+    """Builds the detailed analytics view for a specific chat."""
+    chat = await get_chat(db, chat_id=chat_id)
+    if not chat:
+        return "❌ Chat not found in database.", {
+            "inline_keyboard": [[{"text": "« Back to Main Menu", "callback_data": "menu:main"}]]
+        }
+
+    status_icon = "Active ✅" if chat.is_active else "Inactive ❌"
+    text = (
+        f"📊 <b>Group Overview: {chat.title or 'Telegram Chat'}</b>\n\n"
+        f"• <b>Chat ID:</b> <code>{chat.chat_id}</code>\n"
+        f"• <b>Type:</b> <i>{chat.type}</i>\n"
+        f"• <b>Tracked Members:</b> <b>{chat.total_members}</b>\n"
+        f"• <b>Verified Invites:</b> <b>{chat.total_invites}</b>\n"
+        f"• <b>Status:</b> {status_icon}\n\n"
+        f"Select an action:"
+    )
+    keyboard = [
+        [{"text": "🏆 Top Inviters (Leaderboard)", "callback_data": f"lb:{chat_id}"}],
+        [{"text": "🔗 Invite Links Performance", "callback_data": f"links:{chat_id}"}],
+        [{"text": "📥 Export Report (CSV)", "callback_data": f"export:{chat_id}"}],
+        [{"text": "« Back to Groups", "callback_data": "menu:main"}],
+    ]
+    return text, {"inline_keyboard": keyboard}
+
+
+async def build_leaderboard_menu(
+    db: AsyncSession | TelegramRepository,
+    chat_id: int,
+) -> tuple[str, dict[str, Any]]:
+    """Builds the top inviters leaderboard view for a specific chat."""
+    leaderboard = await get_chat_leaderboard(db, chat_id=chat_id, limit=10)
+    text_lines = [f"🏆 <b>Top Inviters Leaderboard</b>\n<code>Chat ID: {chat_id}</code>\n"]
+    if not leaderboard:
+        text_lines.append("<i>No verified invites recorded in this chat yet.</i>")
+    else:
+        medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+        for idx, entry in enumerate(leaderboard, start=1):
+            icon = medals.get(idx, f"<b>{idx}.</b>")
+            user_display = f"@{entry.username}" if entry.username else entry.first_name
+            text_lines.append(f"{icon} {user_display} — <b>{entry.total_invites}</b> invites")
+
+    keyboard = [
+        [{"text": "📥 Export Full CSV", "callback_data": f"export:{chat_id}"}],
+        [{"text": "« Back to Group", "callback_data": f"chat:{chat_id}"}],
+        [{"text": "« Main Menu", "callback_data": "menu:main"}],
+    ]
+    return "\n".join(text_lines), {"inline_keyboard": keyboard}
+
+
+async def build_links_menu(
+    db: AsyncSession | TelegramRepository,
+    chat_id: int,
+) -> tuple[str, dict[str, Any]]:
+    """Builds the invite links performance breakdown view."""
+    repo = _resolve_repo(db)
+    links = await repo.list_top_invite_links(chat_id=chat_id, limit=10)
+
+    text_lines = [f"🔗 <b>Invite Links Performance</b>\n<code>Chat ID: {chat_id}</code>\n"]
+    if not links:
+        text_lines.append("<i>No tracked invite links recorded yet for this chat.</i>")
+    else:
+        for idx, link in enumerate(links, start=1):
+            name_label = f" ({link.name})" if link.name else ""
+            primary_tag = " ⭐ Primary" if link.is_primary else ""
+            text_lines.append(
+                f"<b>{idx}.</b> <code>{link.invite_link}</code>{name_label}{primary_tag}\n"
+                f"   ↳ <b>{link.usage_count}</b> verified joins"
+            )
+
+    keyboard = [
+        [{"text": "« Back to Group", "callback_data": f"chat:{chat_id}"}],
+        [{"text": "« Main Menu", "callback_data": "menu:main"}],
+    ]
+    return "\n".join(text_lines), {"inline_keyboard": keyboard}
+
+
+# =============================================================================
+# Callback Query & Webhook Event Dispatcher
+# =============================================================================
+
+async def handle_callback_query(
+    db: AsyncSession | TelegramRepository,
+    callback_query: CallbackQueryPayload,
+) -> dict[str, Any]:
+    """Handles button clicks from inline keyboards in private messages."""
+    repo = _resolve_repo(db)
+    if not callback_query.message:
+        await answer_callback_query(callback_query.id, "Session expired.")
+        return {"handled": False}
+
+    dm_chat_id = callback_query.message.chat.id
+    message_id = callback_query.message.message_id
+    user_id = callback_query.from_user.id
+    data = callback_query.data or ""
+
+    if data == "menu:main":
+        admin_chats = await get_admin_chats(repo, user_id=user_id)
+        if not admin_chats:
+            await edit_message_text(
+                dm_chat_id,
+                message_id,
+                "⛔ <b>Access Restricted</b>\n\nYou are not recognized as an administrator in any tracked groups.",
+            )
+        else:
+            text, markup = build_main_menu(admin_chats, user_first_name=callback_query.from_user.first_name)
+            await edit_message_text(dm_chat_id, message_id, text, reply_markup=markup)
+        await answer_callback_query(callback_query.id)
+        return {"handled": True, "action": "menu_main"}
+
+    if data == "menu:about":
+        about_text = (
+            "ℹ️ <b>About Zemen Invite Tracker</b>\n\n"
+            "• Version: <code>1.0.0</code>\n"
+            "• Automatically monitors group joins via direct adds and invite links.\n"
+            "• Deduplicates rejoining members and calculates accurate invite statistics.\n"
+            "• Accessible exclusively to verified group administrators."
+        )
+        markup = {"inline_keyboard": [[{"text": "« Back to Main Menu", "callback_data": "menu:main"}]]}
+        await edit_message_text(dm_chat_id, message_id, about_text, reply_markup=markup)
+        await answer_callback_query(callback_query.id)
+        return {"handled": True, "action": "menu_about"}
+
+    if data.startswith("chat:"):
+        target_chat_id = int(data.split(":")[1])
+        if not await is_chat_admin(target_chat_id, user_id):
+            await answer_callback_query(callback_query.id, "⛔ You are not an admin of this group.", show_alert=True)
+            return {"handled": False, "error": "unauthorized"}
+        text, markup = await build_chat_detail_menu(repo, target_chat_id)
+        await edit_message_text(dm_chat_id, message_id, text, reply_markup=markup)
+        await answer_callback_query(callback_query.id)
+        return {"handled": True, "action": "chat_detail", "chat_id": target_chat_id}
+
+    if data.startswith("lb:"):
+        target_chat_id = int(data.split(":")[1])
+        if not await is_chat_admin(target_chat_id, user_id):
+            await answer_callback_query(callback_query.id, "⛔ You are not an admin of this group.", show_alert=True)
+            return {"handled": False, "error": "unauthorized"}
+        text, markup = await build_leaderboard_menu(repo, target_chat_id)
+        await edit_message_text(dm_chat_id, message_id, text, reply_markup=markup)
+        await answer_callback_query(callback_query.id)
+        return {"handled": True, "action": "leaderboard", "chat_id": target_chat_id}
+
+    if data.startswith("links:"):
+        target_chat_id = int(data.split(":")[1])
+        if not await is_chat_admin(target_chat_id, user_id):
+            await answer_callback_query(callback_query.id, "⛔ You are not an admin of this group.", show_alert=True)
+            return {"handled": False, "error": "unauthorized"}
+        text, markup = await build_links_menu(repo, target_chat_id)
+        await edit_message_text(dm_chat_id, message_id, text, reply_markup=markup)
+        await answer_callback_query(callback_query.id)
+        return {"handled": True, "action": "links", "chat_id": target_chat_id}
+
+    if data.startswith("export:"):
+        target_chat_id = int(data.split(":")[1])
+        if not await is_chat_admin(target_chat_id, user_id):
+            await answer_callback_query(callback_query.id, "⛔ You are not an admin of this group.", show_alert=True)
+            return {"handled": False, "error": "unauthorized"}
+        await answer_callback_query(callback_query.id, "Generating CSV report...")
+        csv_data = await generate_chat_invites_csv(repo, target_chat_id)
+        filename = f"invites_{abs(target_chat_id)}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+        caption = f"📊 <b>Invite Report</b>\n• Chat ID: <code>{target_chat_id}</code>\n• Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        await send_document(dm_chat_id, filename, csv_data.encode("utf-8"), caption=caption)
+        return {"handled": True, "action": "export", "chat_id": target_chat_id}
+
+    await answer_callback_query(callback_query.id)
+    return {"handled": False, "type": "unknown_callback"}
 
 
 async def process_telegram_webhook_update(
-    db: AsyncSession,
+    db: AsyncSession | TelegramRepository,
     update_data: TelegramWebhookUpdate,
 ) -> dict[str, Any]:
-    """Dispatches webhook update to appropriate handler."""
+    """Dispatches webhook update to appropriate handler using TelegramRepository."""
+    repo = _resolve_repo(db)
+
     if update_data.chat_member:
-        return await process_chat_member_updated(db, update_data.chat_member)
+        return await process_chat_member_updated(repo, update_data.chat_member)
+
+    if update_data.callback_query:
+        return await handle_callback_query(repo, update_data.callback_query)
 
     if update_data.my_chat_member:
-        # Bot's own membership status changed (e.g., added/removed as admin)
+        # Bot's own membership status changed (e.g. added/removed as admin)
         logger.info(
             "Bot status in chat %d changed from %s to %s",
             update_data.my_chat_member.chat.id,
             update_data.my_chat_member.old_chat_member.status,
             update_data.my_chat_member.new_chat_member.status,
         )
-        # Update chat active state if bot was removed
-        is_active = update_data.my_chat_member.new_chat_member.status in JOIN_STATUSES
-        chat_stmt = (
-            insert(TelegramChat)
-            .values(
+        if update_data.my_chat_member.chat.type in ("group", "supergroup", "channel"):
+            is_active = update_data.my_chat_member.new_chat_member.status in JOIN_STATUSES
+            await repo.upsert_chat(
                 chat_id=update_data.my_chat_member.chat.id,
                 title=update_data.my_chat_member.chat.title,
                 type=update_data.my_chat_member.chat.type,
                 is_active=is_active,
             )
-            .on_conflict_do_update(
-                index_elements=[TelegramChat.chat_id],
-                set_={
-                    "title": update_data.my_chat_member.chat.title,
-                    "type": update_data.my_chat_member.chat.type,
-                    "is_active": is_active,
-                    "updated_at": func.now(),
-                },
-            )
-        )
-        await db.execute(chat_stmt)
-        return {"handled": True, "type": "my_chat_member", "is_active": is_active}
+            return {"handled": True, "type": "my_chat_member", "is_active": is_active}
+        return {"handled": True, "type": "my_chat_member"}
 
     if update_data.message:
         msg = update_data.message
-        # Upsert Chat to record its chat_id and details
-        chat_stmt = (
-            insert(TelegramChat)
-            .values(
+        # Upsert Chat to record its chat_id and details (only for groups, supergroups, and channels)
+        if msg.chat.type in ("group", "supergroup", "channel"):
+            await repo.upsert_chat(
                 chat_id=msg.chat.id,
                 title=msg.chat.title,
                 type=msg.chat.type,
                 is_active=True,
             )
-            .on_conflict_do_update(
-                index_elements=[TelegramChat.chat_id],
-                set_={
-                    "title": msg.chat.title,
-                    "type": msg.chat.type,
-                    "is_active": True,
-                    "updated_at": func.now(),
-                },
-            )
-        )
-        await db.execute(chat_stmt)
 
         # Upsert sending user
         if msg.from_user:
-            user_stmt = (
-                insert(TelegramUser)
-                .values(
-                    user_id=msg.from_user.id,
-                    username=msg.from_user.username,
-                    first_name=msg.from_user.first_name,
-                    last_name=msg.from_user.last_name,
-                    is_bot=msg.from_user.is_bot,
-                )
-                .on_conflict_do_update(
-                    index_elements=[TelegramUser.user_id],
-                    set_={
-                        "username": msg.from_user.username,
-                        "first_name": msg.from_user.first_name,
-                        "last_name": msg.from_user.last_name,
-                        "is_bot": msg.from_user.is_bot,
-                        "updated_at": func.now(),
-                    },
-                )
+            await repo.upsert_user(
+                user_id=msg.from_user.id,
+                username=msg.from_user.username,
+                first_name=msg.from_user.first_name,
+                last_name=msg.from_user.last_name,
+                is_bot=msg.from_user.is_bot,
             )
-            await db.execute(user_stmt)
 
-        # Responds with chat info if user sends /id, /chatid, or /start
-        raw_text = (msg.text or "").strip().lower()
-        if raw_text in ("/id", "/chatid", "/chat_id", "/start", "/info"):
+        # 1. Private Messages (Direct Message with Bot) -> Admin Dashboard
+        if msg.chat.type == "private" and msg.from_user:
+            raw_text = (msg.text or "").strip()
+            first_word = raw_text.split()[0].lower() if raw_text else ""
+            command = first_word.split("@")[0]
+
+            # Support registering a chat manually: /register <chat_id> or sending the chat ID directly
+            if command in ("/register", "/addgroup", "/track", "/link") or (
+                raw_text.lstrip("-").isdigit() and (raw_text.startswith("-100") or raw_text.startswith("-"))
+            ):
+                target_chat_str = ""
+                parts = raw_text.split()
+                if len(parts) > 1:
+                    target_chat_str = parts[1]
+                elif raw_text.lstrip("-").isdigit():
+                    target_chat_str = raw_text
+
+                if target_chat_str:
+                    try:
+                        target_chat_id = int(target_chat_str)
+                    except ValueError:
+                        await send_message(
+                            chat_id=msg.chat.id,
+                            text="⚠️ <b>Invalid Chat ID format</b>. Chat IDs are usually negative numbers like <code>-1002839533734</code>.",
+                        )
+                        return {"handled": True, "type": "private_message", "action": "register_invalid"}
+
+                    chat_info = await fetch_chat_info(target_chat_id)
+                    if not chat_info:
+                        await send_message(
+                            chat_id=msg.chat.id,
+                            text=(
+                                f"❌ <b>Unable to find group <code>{target_chat_id}</code></b>\n\n"
+                                f"Please make sure the bot is added to your group as an <b>Administrator</b> with 'Invite Users via Link' permission."
+                            ),
+                        )
+                        return {"handled": True, "type": "private_message", "action": "register_not_found"}
+
+                    chat_type = chat_info.get("type", "group")
+                    if chat_type not in ("group", "supergroup", "channel"):
+                        await send_message(
+                            chat_id=msg.chat.id,
+                            text="⚠️ Only groups, supergroups, and channels can be tracked.",
+                        )
+                        return {"handled": True, "type": "private_message", "action": "register_invalid_type"}
+
+                    # Verify admin permission
+                    if not await is_chat_admin(chat_id=target_chat_id, user_id=msg.from_user.id):
+                        await send_message(
+                            chat_id=msg.chat.id,
+                            text=f"⛔ <b>Permission Denied</b>\n\nYou are not an administrator of <b>{chat_info.get('title', target_chat_id)}</b>.",
+                        )
+                        return {"handled": True, "type": "private_message", "action": "register_unauthorized"}
+
+                    # Upsert chat via repository
+                    await repo.upsert_chat(
+                        chat_id=target_chat_id,
+                        title=chat_info.get("title"),
+                        type=chat_type,
+                        is_active=True,
+                    )
+
+                    admin_chats = await get_admin_chats(repo, user_id=msg.from_user.id)
+                    menu_text, markup = build_main_menu(admin_chats, user_first_name=msg.from_user.first_name)
+                    success_text = (
+                        f"✅ <b>Group Connected Successfully!</b>\n\n"
+                        f"<b>Group:</b> {chat_info.get('title')}\n"
+                        f"<b>Chat ID:</b> <code>{target_chat_id}</code>\n\n"
+                        f"{menu_text}"
+                    )
+                    await send_message(chat_id=msg.chat.id, text=success_text, reply_markup=markup)
+                    return {"handled": True, "type": "private_message", "action": "registered_group"}
+
+            admin_chats = await get_admin_chats(repo, user_id=msg.from_user.id)
+            if not admin_chats:
+                restricted_msg = (
+                    f"⛔ <b>Access Restricted</b>\n\n"
+                    f"Hi {msg.from_user.first_name}! This bot is configured for group administrators only.\n\n"
+                    f"You are currently not recognized as an administrator in any tracked groups.\n\n"
+                    f"<b>How to get access:</b>\n"
+                    f"1. Add this bot to your group or channel as an <b>Administrator</b>.\n"
+                    f"2. Send <code>/id</code> inside your group to register it, or\n"
+                    f"3. Send <code>/register &lt;chat_id&gt;</code> here in this chat (e.g. <code>/register -1002839533734</code>)."
+                )
+                await send_message(chat_id=msg.chat.id, text=restricted_msg)
+            else:
+                text, markup = build_main_menu(admin_chats, user_first_name=msg.from_user.first_name)
+                await send_message(chat_id=msg.chat.id, text=text, reply_markup=markup)
+            return {"handled": True, "type": "private_message", "is_admin": bool(admin_chats)}
+
+        # 2. Group Messages -> Direct admins to DM to keep group chat clean
+        raw_text = (msg.text or "").strip()
+        first_word = raw_text.split()[0].lower() if raw_text else ""
+        command = first_word.split("@")[0]
+
+        if command in ("/admin", "/dashboard", "/stats", "/menu", "/start"):
+            dm_notice = (
+                f"🔒 <b>Admin Control Panel</b>\n\n"
+                f"Hi {msg.from_user.first_name if msg.from_user else 'there'}! Administrative statistics, leaderboards, and reports are accessible exclusively in <b>Private Messages</b> to avoid group chat clutter.\n\n"
+                f"👉 Please open a direct message with me to view your dashboard."
+            )
+            await send_message(chat_id=msg.chat.id, text=dm_notice)
+        elif command in ("/id", "/chatid", "/chat_id", "/register", "/track"):
             reply = (
                 f"📋 <b>Telegram Chat Info</b>\n\n"
                 f"• <b>Chat ID:</b> <code>{msg.chat.id}</code>\n"
-                f"• <b>Title:</b> {msg.chat.title or 'Private Chat'}\n"
-                f"• <b>Type:</b> {msg.chat.type}"
+                f"• <b>Title:</b> {msg.chat.title or 'Group'}\n"
+                f"• <b>Type:</b> {msg.chat.type}\n"
+                f"• <b>Status:</b> Tracked ✅\n\n"
+                f"<i>Admins can open a direct message with this bot to view the dashboard and export reports.</i>"
             )
             await send_message(chat_id=msg.chat.id, text=reply)
 
-        return {"handled": True, "type": "message", "chat_id": msg.chat.id}
+        return {"handled": True, "type": "group_message", "chat_id": msg.chat.id}
 
     return {"handled": False, "type": "ignored"}
 
 
+# =============================================================================
+# Read Queries (Delegated to TelegramRepository)
+# =============================================================================
+
 async def list_chats(
-    db: AsyncSession,
+    db: AsyncSession | TelegramRepository,
     limit: int = 50,
     offset: int = 0,
 ) -> list[TelegramChatOut]:
     """Lists all tracked chats with current active members and total invite counts."""
-    member_count_subq = (
-        select(
-            TelegramChatMember.chat_id,
-            func.count(TelegramChatMember.id).label("total_members"),
-        )
-        .where(TelegramChatMember.status.in_(["member", "administrator"]))
-        .group_by(TelegramChatMember.chat_id)
-        .subquery()
-    )
-
-    invite_count_subq = (
-        select(
-            TelegramInviteStat.chat_id,
-            func.coalesce(func.sum(TelegramInviteStat.total_invites), 0).label("total_invites"),
-        )
-        .group_by(TelegramInviteStat.chat_id)
-        .subquery()
-    )
-
-    query = (
-        select(
-            TelegramChat,
-            func.coalesce(member_count_subq.c.total_members, 0).label("total_members"),
-            func.coalesce(invite_count_subq.c.total_invites, 0).label("total_invites"),
-        )
-        .outerjoin(member_count_subq, TelegramChat.chat_id == member_count_subq.c.chat_id)
-        .outerjoin(invite_count_subq, TelegramChat.chat_id == invite_count_subq.c.chat_id)
-        .order_by(TelegramChat.updated_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    res = await db.execute(query)
-    rows = res.all()
-
+    repo = _resolve_repo(db)
+    domains = await repo.list_chats_with_counts(limit=limit, offset=offset)
     return [
         TelegramChatOut(
-            chat_id=chat.chat_id,
-            title=chat.title,
-            type=chat.type,
-            is_active=chat.is_active,
-            total_members=total_members,
-            total_invites=total_invites,
-            created_at=chat.created_at,
-            updated_at=chat.updated_at,
+            chat_id=d.chat_id,
+            title=d.title,
+            type=d.type,
+            is_active=d.is_active,
+            total_members=d.total_members,
+            total_invites=d.total_invites,
+            created_at=d.created_at,
+            updated_at=d.updated_at,
         )
-        for chat, total_members, total_invites in rows
+        for d in domains
     ]
 
 
 async def get_chat(
-    db: AsyncSession,
+    db: AsyncSession | TelegramRepository,
     chat_id: int,
 ) -> TelegramChatOut | None:
     """Retrieves metadata and counters for a single chat."""
-    member_count_subq = (
-        select(
-            TelegramChatMember.chat_id,
-            func.count(TelegramChatMember.id).label("total_members"),
-        )
-        .where(TelegramChatMember.status.in_(["member", "administrator"]))
-        .group_by(TelegramChatMember.chat_id)
-        .subquery()
-    )
-
-    invite_count_subq = (
-        select(
-            TelegramInviteStat.chat_id,
-            func.coalesce(func.sum(TelegramInviteStat.total_invites), 0).label("total_invites"),
-        )
-        .group_by(TelegramInviteStat.chat_id)
-        .subquery()
-    )
-
-    query = (
-        select(
-            TelegramChat,
-            func.coalesce(member_count_subq.c.total_members, 0).label("total_members"),
-            func.coalesce(invite_count_subq.c.total_invites, 0).label("total_invites"),
-        )
-        .outerjoin(member_count_subq, TelegramChat.chat_id == member_count_subq.c.chat_id)
-        .outerjoin(invite_count_subq, TelegramChat.chat_id == invite_count_subq.c.chat_id)
-        .where(TelegramChat.chat_id == chat_id)
-    )
-    res = await db.execute(query)
-    row = res.one_or_none()
-    if not row:
+    repo = _resolve_repo(db)
+    d = await repo.get_chat_with_counts(chat_id=chat_id)
+    if not d:
         return None
-
-    chat, total_members, total_invites = row
     return TelegramChatOut(
-        chat_id=chat.chat_id,
-        title=chat.title,
-        type=chat.type,
-        is_active=chat.is_active,
-        total_members=total_members,
-        total_invites=total_invites,
-        created_at=chat.created_at,
-        updated_at=chat.updated_at,
+        chat_id=d.chat_id,
+        title=d.title,
+        type=d.type,
+        is_active=d.is_active,
+        total_members=d.total_members,
+        total_invites=d.total_invites,
+        created_at=d.created_at,
+        updated_at=d.updated_at,
     )
 
 
 async def get_user_invite_stats(
-    db: AsyncSession,
+    db: AsyncSession | TelegramRepository,
     chat_id: int,
     user_id: int,
 ) -> TelegramInviteStat | None:
     """Fetches total invite counter for a specific user in a chat."""
-    query = select(TelegramInviteStat).where(
-        TelegramInviteStat.chat_id == chat_id,
-        TelegramInviteStat.user_id == user_id,
-    )
-    res = await db.execute(query)
-    return res.scalar_one_or_none()
+    repo = _resolve_repo(db)
+    return await repo.get_user_invite_stat(chat_id=chat_id, user_id=user_id)
 
 
 async def get_chat_leaderboard(
-    db: AsyncSession,
+    db: AsyncSession | TelegramRepository,
     chat_id: int,
     limit: int = 20,
 ) -> list[TelegramLeaderboardEntry]:
     """Retrieves the top inviters in a specified chat."""
-    query = (
-        select(
-            TelegramInviteStat.user_id,
-            TelegramUser.username,
-            TelegramUser.first_name,
-            TelegramInviteStat.total_invites,
-        )
-        .join(TelegramUser, TelegramUser.user_id == TelegramInviteStat.user_id)
-        .where(TelegramInviteStat.chat_id == chat_id)
-        .order_by(TelegramInviteStat.total_invites.desc())
-        .limit(limit)
-    )
-    res = await db.execute(query)
-    rows = res.all()
+    repo = _resolve_repo(db)
+    domains = await repo.get_leaderboard(chat_id=chat_id, limit=limit)
     return [
         TelegramLeaderboardEntry(
-            user_id=row.user_id,
-            username=row.username,
-            first_name=row.first_name,
-            total_invites=row.total_invites,
+            user_id=d.user_id,
+            username=d.username,
+            first_name=d.first_name,
+            total_invites=d.total_invites,
         )
-        for row in rows
+        for d in domains
     ]

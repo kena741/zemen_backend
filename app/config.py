@@ -107,7 +107,7 @@ class Settings(BaseSettings):
 
     # AfroMessage SMS Gateway & Pluggable SMS
     AFRO_SMS_TOKEN: str | None = None
-    AFRO_SMS_SENDER_NAME: str = "AfroMessage"
+    AFRO_SMS_SENDER_NAME: str = "Zemen Serv"
     AFRO_SMS_IDENTIFIER_ID: str | None = None
     AFRO_SMS_BASE_URL: str = "https://api.afromessage.com/api"
     SMS_PROVIDER: str = "afromessage"  # "afromessage" | "generic" | "mock"

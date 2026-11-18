@@ -98,9 +98,14 @@ def get_sms_provider() -> SMSProvider:
     """Dependency injector / factory for obtaining the active SMS provider."""
     global _global_sms_provider
     if _global_sms_provider is None:
-        # If external gateway URL is present, use generic external adapter, else mock
-        gateway_url = getattr(settings, "SMS_GATEWAY_URL", None)
-        if gateway_url:
+        from app.core.sms.afro_provider import AfroSMSProvider
+
+        provider_type = (getattr(settings, "SMS_PROVIDER", None) or "").lower().strip()
+        afro_token = (getattr(settings, "AFRO_SMS_TOKEN", None) or "").strip()
+
+        if (provider_type == "afromessage" and afro_token) or (afro_token and provider_type != "mock"):
+            _global_sms_provider = AfroSMSProvider()
+        elif getattr(settings, "SMS_GATEWAY_URL", None):
             _global_sms_provider = GenericExternalSMSProvider()
         else:
             _global_sms_provider = MockSMSProvider()

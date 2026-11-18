@@ -1,3 +1,4 @@
+from app.core.sms.afro_provider import AfroSMSProvider
 from app.core.sms.otp_engine import OtpEngine, get_otp_engine
 from app.core.sms.provider import (
     GenericExternalSMSProvider,
@@ -9,6 +10,7 @@ from app.core.sms.provider import (
 
 __all__ = [
     "SMSProvider",
+    "AfroSMSProvider",
     "MockSMSProvider",
     "GenericExternalSMSProvider",
     "get_sms_provider",

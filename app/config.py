@@ -105,6 +105,16 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_JSON: str | None = None
     FIREBASE_CREDENTIALS_FILE: str | None = None
 
+    # AfroMessage SMS Gateway & Pluggable SMS
+    AFRO_SMS_TOKEN: str | None = None
+    AFRO_SMS_SENDER_NAME: str = "AfroMessage"
+    AFRO_SMS_IDENTIFIER_ID: str | None = None
+    AFRO_SMS_BASE_URL: str = "https://api.afromessage.com/api"
+    SMS_PROVIDER: str = "afromessage"  # "afromessage" | "generic" | "mock"
+    SMS_GATEWAY_URL: str | None = None
+    SMS_API_KEY: str | None = None
+    SMS_SENDER_ID: str = "Zemen"
+
     # Telegram Bot Webhook Integration - Environment-specific
     DEVELOPMENT_TELEGRAM_BOT_TOKEN: str | None = None
     DEVELOPMENT_TELEGRAM_WEBHOOK_SECRET: str | None = None

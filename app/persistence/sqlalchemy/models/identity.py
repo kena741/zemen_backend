@@ -5,7 +5,7 @@ from uuid import UUID
 
 from sqlalchemy import Boolean, DateTime, Integer, Numeric, Text, Uuid
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, synonym
 
 from app.persistence.sqlalchemy.base import Base
 from app.persistence.sqlalchemy.enums import COMPANY_VERIFICATION_STATUS, PROVIDER_TYPE
@@ -115,7 +115,7 @@ class Company(Base):
     __tablename__ = "companies"
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
-    provider_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False, unique=True)
+    provider_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True, unique=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     website: Mapped[str | None] = mapped_column(Text, nullable=True)
     company_name: Mapped[str | None] = mapped_column(Text, nullable=True)

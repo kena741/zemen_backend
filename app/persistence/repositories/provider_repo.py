@@ -49,7 +49,7 @@ class ProviderRepository(BaseRepository[Provider, ProviderDomain]):
             verified_subcategory_ids=list(entity.verified_subcategory_ids or []),
             signup_source=entity.signup_source,
             profession_id=entity.profession_id,
-            category_id=entity.category_id,
+            category_id=str(entity.category_id) if entity.category_id else None,
             company_license_url=entity.company_license_url,
             company_rejection_reason=entity.company_rejection_reason,
             service_tier_tx_ref=entity.service_tier_tx_ref,
@@ -61,6 +61,13 @@ class ProviderRepository(BaseRepository[Provider, ProviderDomain]):
 
     def to_model(self, domain: ProviderDomain) -> Provider:
         now = datetime.now(timezone.utc)
+        cat_uuid: UUID | None = None
+        if domain.category_id:
+            try:
+                cat_uuid = UUID(str(domain.category_id))
+            except (ValueError, TypeError):
+                cat_uuid = None
+
         return Provider(
             id=domain.id,
             user_id=domain.user_id,
@@ -92,7 +99,7 @@ class ProviderRepository(BaseRepository[Provider, ProviderDomain]):
             verified_subcategory_ids=domain.verified_subcategory_ids,
             signup_source=domain.signup_source or "mobile",
             profession_id=domain.profession_id,
-            category_id=domain.category_id,
+            category_id=cat_uuid,
             company_license_url=domain.company_license_url,
             company_rejection_reason=domain.company_rejection_reason,
             service_tier_tx_ref=domain.service_tier_tx_ref,

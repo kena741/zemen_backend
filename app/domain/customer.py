@@ -39,6 +39,14 @@ class CustomerDomain:
         parts = [p for p in (self.first_name, self.last_name) if p]
         return " ".join(parts) if parts else (self.user_name or "Customer")
 
+    @property
+    def phone_number(self) -> str:
+        return self.phone
+
+    @property
+    def profile_image(self) -> str | None:
+        return self.profile_pic
+
 
 @dataclass
 class CustomerStatsDomain:

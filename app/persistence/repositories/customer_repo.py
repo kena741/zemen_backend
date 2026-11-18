@@ -52,6 +52,14 @@ class CustomerRepository(BaseRepository[Customer, CustomerDomain]):
 
     def to_model(self, domain: CustomerDomain) -> Customer:
         now = datetime.now(timezone.utc)
+        addr_str = None
+        if domain.address is not None:
+            if isinstance(domain.address, (dict, list)):
+                import json
+                addr_str = json.dumps(domain.address)
+            else:
+                addr_str = str(domain.address)
+
         return Customer(
             id=domain.id,
             user_id=domain.user_id,
@@ -67,7 +75,7 @@ class CustomerRepository(BaseRepository[Customer, CustomerDomain]):
             wallet_amount=Decimal(str(domain.wallet_amount or 0.0)),
             active=domain.active if domain.active is not None else True,
             slug=domain.slug,
-            address=domain.address,
+            address=addr_str,
             default_address=domain.default_address,
             customer_addresses=domain.customer_addresses,
             signup_source=domain.signup_source or "mobile",

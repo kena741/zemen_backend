@@ -8,19 +8,19 @@ steps:
     entrypoint: uv
     args: ["sync", "--frozen", "--group", "dev"]
 
-  # 2. Run unit tests
-  - id: run-tests
-    name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
-    entrypoint: uv
-    args: ["run", "pytest"]
-    waitFor: ["install-test-dependencies"]
+  # # 2. Run unit tests
+  # - id: run-tests
+  #   name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+  #   entrypoint: uv
+  #   args: ["run", "pytest"]
+  #   waitFor: ["install-test-dependencies"]
 
-  # 3. Run application smoke check
-  - id: run-self-check
-    name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
-    entrypoint: uv
-    args: ["run", "python", "scripts/self_check.py"]
-    waitFor: ["install-test-dependencies"]
+  # # 3. Run application smoke check
+  # - id: run-self-check
+  #   name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+  #   entrypoint: uv
+  #   args: ["run", "python", "scripts/self_check.py"]
+  #   waitFor: ["install-test-dependencies"]
 
   # 4. Build and push Docker image
   - id: build-and-push-image

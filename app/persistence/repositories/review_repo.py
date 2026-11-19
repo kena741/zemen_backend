@@ -83,7 +83,7 @@ class ReviewRepository:
             select(
                 ReviewCustomer,
                 func.concat(Customer.first_name, " ", Customer.last_name).label("c_name"),
-                Customer.profile_image.label("c_img"),
+                Customer.profile_pic.label("c_img"),
             )
             .outerjoin(Customer, ReviewCustomer.customer_id == Customer.id)
             .where(ReviewCustomer.service_id == service_id)
@@ -108,7 +108,7 @@ class ReviewRepository:
             select(
                 ReviewCustomer,
                 func.concat(Customer.first_name, " ", Customer.last_name).label("c_name"),
-                Customer.profile_image.label("c_img"),
+                Customer.profile_pic.label("c_img"),
             )
             .outerjoin(Customer, ReviewCustomer.customer_id == Customer.id)
             .where(ReviewCustomer.booking_id == booking_id)

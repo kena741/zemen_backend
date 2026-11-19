@@ -29,7 +29,8 @@ class JobRequestService:
         customer_id: UUID | None = None,
     ) -> JobRequestDomain:
         data = dict(payload)
-        if not data.get("id"):
+        is_update = bool(data.get("id"))
+        if not is_update:
             data["id"] = str(uuid4())
 
         if actor_role == "customer" or customer_id:
@@ -41,7 +42,7 @@ class JobRequestService:
             if c_id:
                 data["customer_id"] = str(c_id)
 
-        if not data.get("title") and not data.get("description"):
+        if not is_update and not data.get("title") and not data.get("description"):
             raise ValidationError("Job request must include a title or description.")
 
         return await self.job_repo.upsert_job_request(data)

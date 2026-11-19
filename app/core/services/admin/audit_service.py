@@ -23,6 +23,7 @@ class AdminAuditService:
         summary: str,
         ctx: AdminContext | None = None,
         resource_id: str | None = None,
+        route: str | None = None,
         metadata: dict[str, Any] | None = None,
         env: str = "prod",
     ) -> ActivityLogDomain:
@@ -31,7 +32,7 @@ class AdminAuditService:
         admin_email = ctx.email if ctx else None
         admin_name = ctx.full_name if ctx else None
         admin_role = ctx.role if ctx else None
-        route = ctx.route if ctx else None
+        route = route or (ctx.route if ctx else None)
 
         return await self.repo.log_activity(
             action=action,

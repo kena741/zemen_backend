@@ -1,21 +1,67 @@
 steps:
+  # 1. Start ephemeral PostgreSQL container on the cloudbuild Docker network
+  - id: start-test-db
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - -d
+      - --name=postgres-db
+      - --network=cloudbuild
+      - -e
+      - POSTGRES_DB=zemen_test
+      - -e
+      - POSTGRES_USER=postgres
+      - -e
+      - POSTGRES_PASSWORD=postgres
+      - postgres:16-alpine
+
+  # 2. Wait until PostgreSQL is fully ready to accept connections
+  - id: wait-for-test-db
+    name: gcr.io/cloud-builders/docker
+    args:
+      - exec
+      - postgres-db
+      - sh
+      - -c
+      - |
+        until pg_isready -U postgres -d zemen_test; do
+          echo "Waiting for postgres to become ready..."
+          sleep 0.5
+        done
+        echo "PostgreSQL is ready!"
+    waitFor: ["start-test-db"]
+
+  # 3. Install test dependencies
   - id: install-test-dependencies
     name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
     entrypoint: uv
     args: ["sync", "--frozen", "--group", "dev"]
+    waitFor: ["-"]
 
+  # 4. Run automated test suite (unit + integration)
   - id: run-tests
     name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
     entrypoint: uv
+    env:
+      - "DEVELOPMENT_DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres-db:5432/zemen_test"
+      - "TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres-db:5432/zemen_test"
     args: ["run", "pytest"]
-    waitFor: ["install-test-dependencies"]
+    waitFor: ["wait-for-test-db", "install-test-dependencies"]
 
+  # 5. Clean up ephemeral test database
+  - id: cleanup-test-db
+    name: gcr.io/cloud-builders/docker
+    args: ["rm", "-f", "postgres-db"]
+    waitFor: ["run-tests"]
+
+  # 6. Run smoke check
   - id: run-self-check
     name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
     entrypoint: uv
     args: ["run", "python", "scripts/self_check.py"]
     waitFor: ["install-test-dependencies"]
 
+  # 7. Build image
   - id: build-image
     name: gcr.io/cloud-builders/docker
     env: ["DOCKER_BUILDKIT=1"]
@@ -25,8 +71,9 @@ steps:
       - --file=Dockerfile
       - --tag=europe-west4-docker.pkg.dev/$PROJECT_ID/zemen-service-backend/backend:$SHORT_SHA
       - .
-    waitFor: ["run-tests", "run-self-check"]
+    waitFor: ["run-tests", "run-self-check", "cleanup-test-db"]
 
+  # 8. Push image
   - id: push-image
     name: gcr.io/cloud-builders/docker
     args:
@@ -34,6 +81,7 @@ steps:
       - europe-west4-docker.pkg.dev/$PROJECT_ID/zemen-service-backend/backend:$SHORT_SHA
     waitFor: ["build-image"]
 
+  # 9. Deploy to Cloud Run
   - id: deploy-cloud-run
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     entrypoint: gcloud

@@ -2,27 +2,69 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
-  # 1. Install dependencies for automated testing
+  # 1. Start ephemeral PostgreSQL container on the cloudbuild Docker network
+  - id: start-test-db
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - -d
+      - --name=postgres-db
+      - --network=cloudbuild
+      - -e
+      - POSTGRES_DB=zemen_test
+      - -e
+      - POSTGRES_USER=postgres
+      - -e
+      - POSTGRES_PASSWORD=postgres
+      - postgres:16-alpine
+
+  # 2. Wait until PostgreSQL is fully ready to accept connections
+  - id: wait-for-test-db
+    name: gcr.io/cloud-builders/docker
+    args:
+      - exec
+      - postgres-db
+      - sh
+      - -c
+      - |
+        until pg_isready -U postgres -d zemen_test; do
+          echo "Waiting for postgres to become ready..."
+          sleep 0.5
+        done
+        echo "PostgreSQL is ready!"
+    waitFor: ["start-test-db"]
+
+  # 3. Install dependencies for automated testing
   - id: install-test-dependencies
     name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
     entrypoint: uv
     args: ["sync", "--frozen", "--group", "dev"]
+    waitFor: ["-"]
 
-  # 2. Run unit tests
-  # - id: run-tests
-  #   name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
-  #   entrypoint: uv
-  #   args: ["run", "pytest"]
-  #   waitFor: ["install-test-dependencies"]
+  # 4. Run automated test suite (unit + integration)
+  - id: run-tests
+    name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    entrypoint: uv
+    env:
+      - "DEVELOPMENT_DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres-db:5432/zemen_test"
+      - "TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres-db:5432/zemen_test"
+    args: ["run", "pytest"]
+    waitFor: ["wait-for-test-db", "install-test-dependencies"]
 
-  # # 3. Run application smoke check
-  # - id: run-self-check
-  #   name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
-  #   entrypoint: uv
-  #   args: ["run", "python", "scripts/self_check.py"]
-  #   waitFor: ["install-test-dependencies"]
+  # 5. Clean up ephemeral test database
+  - id: cleanup-test-db
+    name: gcr.io/cloud-builders/docker
+    args: ["rm", "-f", "postgres-db"]
+    waitFor: ["run-tests"]
 
-  # 4. Build and push Docker image
+  # 6. Run application smoke check
+  - id: run-self-check
+    name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    entrypoint: uv
+    args: ["run", "python", "scripts/self_check.py"]
+    waitFor: ["install-test-dependencies"]
+
+  # 7. Build and push Docker image
   - id: build-and-push-image
     name: gcr.io/cloud-builders/docker
     env:
@@ -40,9 +82,9 @@ steps:
           .
         docker push "${_IMAGE_URI}:${SHORT_SHA}"
         docker push "${_IMAGE_URI}:latest"
-    # waitFor: ["run-tests", "run-self-check"]
+    waitFor: ["run-tests", "run-self-check", "cleanup-test-db"]
 
-  # 5. Deploy to Cloud Run (Staging)
+  # 8. Deploy to Cloud Run (Staging)
   - id: deploy-cloud-run
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     entrypoint: bash

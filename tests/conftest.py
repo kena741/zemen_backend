@@ -35,10 +35,13 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import secrets
+import socket
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import AsyncGenerator
+from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
 import jwt
@@ -66,13 +69,48 @@ from app.persistence.sqlalchemy.map_registry import init_mapper  # noqa: E402
 init_mapper()
 
 # ---------------------------------------------------------------------------
-# Test database URL — same Postgres host, separate database
+# Test database URL — configurable via TEST_DATABASE_URL
 # ---------------------------------------------------------------------------
-TEST_DB_URL = (
-    settings.DEVELOPMENT_DATABASE_URL.replace(
-        "/zemen_db", "/zemen_test"
-    )
+TEST_DB_URL = os.getenv(
+    "TEST_DATABASE_URL",
+    settings.DEVELOPMENT_DATABASE_URL.replace("/zemen_db", "/zemen_test")
+    if "/zemen_db" in settings.DEVELOPMENT_DATABASE_URL
+    else settings.DEVELOPMENT_DATABASE_URL,
 )
+
+
+def _is_db_reachable(db_url: str) -> bool:
+    """Check if the database host:port is accepting TCP connections."""
+    try:
+        clean_url = db_url.replace("postgresql+asyncpg://", "http://").replace(
+            "postgresql://", "http://"
+        )
+        parsed = urlparse(clean_url)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port or 5432
+        with socket.create_connection((host, port), timeout=0.8):
+            return True
+    except (OSError, ValueError):
+        return False
+
+
+def pytest_collection_modifyitems(config, items):
+    """
+    If the PostgreSQL test database is not reachable (e.g. running in an
+    environment where no Postgres container is running), automatically mark
+    all integration tests under tests/ as skipped rather than failing with
+    connection refused errors.
+    """
+    if not _is_db_reachable(TEST_DB_URL):
+        skip_marker = pytest.mark.skip(
+            reason=(
+                f"PostgreSQL test database is not reachable at {TEST_DB_URL}. "
+                "Skipping integration tests that require a live PostgreSQL instance."
+            )
+        )
+        for item in items:
+            if "tests/" in str(item.fspath) or "tests/integration" in str(item.fspath):
+                item.add_marker(skip_marker)
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +133,6 @@ def _apply_alembic_migrations() -> None:
     Running in a subprocess ensures the Alembic asyncio event loop does not
     conflict with pytest's active session loop.
     """
-    import os
     import subprocess
     import sys
     from pathlib import Path
@@ -106,12 +143,17 @@ def _apply_alembic_migrations() -> None:
         DEVELOPMENT_DATABASE_URL=TEST_DB_URL,
     )
     root = Path(__file__).resolve().parent.parent
-    alembic_bin = sys.executable.replace("python", "alembic")
-    if not Path(alembic_bin).exists():
-        alembic_bin = "alembic"
 
     res = subprocess.run(
-        [alembic_bin, "-c", "app/persistence/sqlalchemy/alembic.ini", "upgrade", "head"],
+        [
+            sys.executable,
+            "-m",
+            "alembic",
+            "-c",
+            "app/persistence/sqlalchemy/alembic.ini",
+            "upgrade",
+            "head",
+        ],
         cwd=str(root),
         env=env,
         capture_output=True,
@@ -125,6 +167,12 @@ def _apply_alembic_migrations() -> None:
 
 @pytest_asyncio.fixture(scope="session")
 async def test_engine():
+    if not _is_db_reachable(TEST_DB_URL):
+        pytest.skip(
+            f"PostgreSQL test database is not reachable at {TEST_DB_URL}. "
+            "Skipping integration tests that require a live PostgreSQL database."
+        )
+
     # Run all real Alembic migrations against the test database
     _apply_alembic_migrations()
 

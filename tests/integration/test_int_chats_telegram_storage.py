@@ -107,16 +107,18 @@ async def test_chats_full_conversation_lifecycle(
 
 
 @pytest.mark.asyncio
-async def test_telegram_webhook_missing_secret_403(client: AsyncClient):
-    """POST /api/v1/telegram/webhook without secret header returns 403."""
+async def test_telegram_webhook_missing_secret_403(client: AsyncClient, monkeypatch):
+    """POST /api/v1/telegram/webhook without secret header returns 403 when secret is set."""
+    monkeypatch.setattr(settings, "TELEGRAM_WEBHOOK_SECRET", "test-secret-token")
     resp = await client.post("/api/v1/telegram/webhook", json={"update_id": 9999})
     assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_telegram_webhook_valid_secret_200(client: AsyncClient):
+async def test_telegram_webhook_valid_secret_200(client: AsyncClient, monkeypatch):
     """POST /api/v1/telegram/webhook with valid secret header returns 200."""
-    headers = {"X-Telegram-Bot-Api-Secret-Token": settings.TELEGRAM_WEBHOOK_SECRET}
+    monkeypatch.setattr(settings, "TELEGRAM_WEBHOOK_SECRET", "test-secret-token")
+    headers = {"X-Telegram-Bot-Api-Secret-Token": "test-secret-token"}
     payload = {"update_id": 10001}
     resp = await client.post("/api/v1/telegram/webhook", json=payload, headers=headers)
     assert resp.status_code == 200

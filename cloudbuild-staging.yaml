@@ -8,7 +8,7 @@ steps:
     entrypoint: uv
     args: ["sync", "--frozen", "--group", "dev"]
 
-  # # 2. Run unit tests
+  # 2. Run unit tests
   # - id: run-tests
   #   name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
   #   entrypoint: uv
@@ -40,7 +40,7 @@ steps:
           .
         docker push "${_IMAGE_URI}:${SHORT_SHA}"
         docker push "${_IMAGE_URI}:latest"
-    waitFor: ["run-tests", "run-self-check"]
+    # waitFor: ["run-tests", "run-self-check"]
 
   # 5. Deploy to Cloud Run (Staging)
   - id: deploy-cloud-run

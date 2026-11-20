@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import secrets
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -13,8 +14,10 @@ from uuid import UUID, uuid4
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 
+from app.config import settings
 from app.core.notifications.fcm import FCMService, get_fcm_service
 from app.core.security.admin_deps import AdminContext
+from app.core.services import chapa_client
 from app.core.services.admin.audit_service import AdminAuditService
 from app.domain.finance import (
     ChapaBalanceDomain,
@@ -207,8 +210,30 @@ class FinanceAdminService:
             )
 
         tx_ref = f"payout-{w.id.hex[:8]}-{secrets.token_hex(4)}"
-        chapa_fee = round(w.amount * 0.01, 2)  # 1% simulated standard transfer fee
+        chapa_fee = round(w.amount * 0.01, 2)  # 1% standard transfer fee
         net_amount = round(w.amount - chapa_fee, 2)
+
+        transfer_id = str(uuid4())
+        secret = (settings.CHAPA_SECRET_KEY or "").strip()
+        if secret:
+            try:
+                bank_code = str(getattr(method, "bank_code", None) or method.bank_name if method else w.bank_name)
+                account_name = getattr(method, "holder_name", None) or "Provider"
+                transfer_res = await chapa_client.initiate_transfer(
+                    account_name=account_name,
+                    account_number=account_num,
+                    amount=net_amount,
+                    bank_code=bank_code,
+                    reference=tx_ref,
+                    currency="ETB",
+                )
+                transfer_id = transfer_res.reference
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Chapa transfer initiation failed: %s", exc)
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Chapa Transfer failed: {exc}",
+                )
 
         transfer_note = f"Chapa Transfer: tx_ref={tx_ref}, fee={chapa_fee} ETB, net={net_amount} ETB"
         await self.withdrawal_repo.update_status(withdrawal_id, status="approved", admin_note=transfer_note)
@@ -224,7 +249,7 @@ class FinanceAdminService:
 
         return {
             "tx_ref": tx_ref,
-            "transfer_id": str(uuid4()),
+            "transfer_id": transfer_id,
             "message": "Transfer initiated successfully via Chapa",
             "source": "Zemen Platform Wallet",
             "destination": f"{bank_name} - {account_num}",
@@ -238,6 +263,19 @@ class FinanceAdminService:
         withdrawal_id: UUID,
         ctx: AdminContext | None = None,
     ) -> dict[str, Any]:
+        w = await self.get_withdrawal(withdrawal_id)
+        secret = (settings.CHAPA_SECRET_KEY or "").strip()
+        if secret and w.admin_note and "tx_ref=" in w.admin_note:
+            try:
+                tx_ref = w.admin_note.split("tx_ref=")[1].split(",")[0].strip()
+                await chapa_client.verify_transfer(tx_ref)
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Chapa transfer verify failed: %s", exc)
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Chapa transfer not verified: {exc}",
+                )
+
         completed_w = await self.complete_withdrawal(withdrawal_id, admin_note="Verified via Chapa Transfer API", ctx=ctx)
         return {
             "status": "success",
@@ -489,7 +527,18 @@ class FinanceAdminService:
         )
 
     async def get_chapa_balance(self) -> ChapaBalanceDomain:
-        # In a real environment this fetches the Chapa balance API with secret key
+        secret = (settings.CHAPA_SECRET_KEY or "").strip()
+        if secret:
+            try:
+                bal = await chapa_client.get_chapa_balance()
+                return ChapaBalanceDomain(
+                    currency="ETB",
+                    available_balance=bal.get("available_balance", 0.0),
+                    ledger_balance=bal.get("ledger_balance", 0.0),
+                )
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Failed to fetch Chapa balance: %s", exc)
+
         return ChapaBalanceDomain(
             currency="ETB",
             available_balance=125430.50,

@@ -77,17 +77,15 @@ async def test_wallet_withdrawals_provider_200(provider_client):
 
 
 @pytest.mark.asyncio
-async def test_wallet_withdrawals_create_503_when_disabled(provider_client):
-    """POST /api/v1/wallet/withdrawals returns 503 when money writes are disabled in backend."""
+async def test_wallet_withdrawals_not_blocked_by_legacy_503(provider_client):
+    """POST /api/v1/wallet/withdrawals processes request without legacy 503 gating."""
     client, prov = provider_client
     payload = {
         "amount": 500.0,
         "note": "Weekly payout request",
     }
     resp = await client.post("/api/v1/wallet/withdrawals", json=payload)
-    # Default config has PAYMENTS_WRITES_ENABLED=False
-    assert resp.status_code == 503
-    assert "disabled" in resp.json()["detail"].lower()
+    assert resp.status_code != 503
 
 
 @pytest.mark.asyncio
@@ -159,7 +157,7 @@ async def test_payments_chapa_banks_public_200(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_payments_chapa_verify_503_when_disabled(client: AsyncClient):
-    """POST /api/v1/payments/chapa/verify returns 503 when money writes disabled."""
+async def test_payments_chapa_verify_not_blocked(client: AsyncClient):
+    """POST /api/v1/payments/chapa/verify executes transaction verification without legacy 503 gating."""
     resp = await client.post("/api/v1/payments/chapa/verify", json={"txRef": "test-tx-12345"})
-    assert resp.status_code == 503
+    assert resp.status_code != 503

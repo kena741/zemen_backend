@@ -236,11 +236,13 @@ class ServiceRepository(BaseRepository[Service, ServiceDomain]):
         service_id: UUID,
         provider_id: UUID,
         patch: dict[str, Any],
+        is_admin_or_system: bool = False,
     ) -> ServiceDomain | None:
         clean = {k: v for k, v in patch.items() if hasattr(self.model, k) and v is not None}
-        # Prevent provider from self-approving or self-featuring
-        clean.pop("approved", None)
-        clean.pop("feature", None)
+        if not is_admin_or_system:
+            # Prevent provider from self-approving or self-featuring
+            clean.pop("approved", None)
+            clean.pop("feature", None)
         stmt = (
             update(self.model)
             .where(self.model.id == service_id, self.model.provider_id == provider_id)

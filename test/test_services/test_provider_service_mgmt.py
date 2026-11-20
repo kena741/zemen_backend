@@ -59,6 +59,28 @@ async def test_get_provider_service_unauthorized(provider_service_mgmt, mock_ser
 
 
 @pytest.mark.asyncio
+async def test_create_service_without_plan_fails(
+    provider_service_mgmt, mock_service_repo, mock_provider_repo
+):
+    prov_id = uuid4()
+    mock_provider_repo.get_by_id.return_value = ProviderDomain(
+        id=prov_id,
+        user_id=uuid4(),
+        phone_number="+251911223344",
+        service_tier_max=0,  # No plan purchased yet
+    )
+
+    data = {
+        "service_name": "Roof Repair",
+        "category_id": uuid4(),
+        "sub_category_id": uuid4(),
+        "price": 500.0,
+    }
+    with pytest.raises(ValidationError, match="No active service plan found"):
+        await provider_service_mgmt.create_service(prov_id, data)
+
+
+@pytest.mark.asyncio
 async def test_create_service_tier_limit_exceeded(
     provider_service_mgmt, mock_service_repo, mock_provider_repo
 ):

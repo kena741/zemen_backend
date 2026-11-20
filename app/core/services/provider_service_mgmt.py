@@ -73,14 +73,19 @@ class ProviderServiceManagementService:
         return service
 
     async def create_service(self, provider_id: UUID, data: dict[str, Any]) -> ServiceDomain:
-        # 1. Check provider tier limit
+        # 1. Check provider plan and tier quota
         provider = await self.provider_repo.get_by_id(provider_id)
-        if provider and provider.service_tier_max > 0:
-            active_count = await self.service_repo.count_active_by_provider(provider_id)
-            if active_count >= provider.service_tier_max:
-                raise ValidationError(
-                    f"Tier limit reached ({active_count}/{provider.service_tier_max} services). Please upgrade your tier."
-                )
+        tier_max = provider.service_tier_max if provider else 0
+        if tier_max <= 0:
+            raise ValidationError(
+                "No active service plan found. Please purchase a service plan to create services."
+            )
+
+        active_count = await self.service_repo.count_active_by_provider(provider_id)
+        if active_count >= tier_max:
+            raise ValidationError(
+                f"Tier limit reached ({active_count}/{tier_max} services). Please upgrade your tier."
+            )
 
         now = datetime.now(timezone.utc)
         domain = ServiceDomain(

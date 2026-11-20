@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, Integer, Numeric, Text, Uuid
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, Numeric, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -103,37 +103,31 @@ class ServiceTierPayment(Base):
 
     __tablename__ = "service_tier_payment"
 
-    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
-    provider_id: Mapped[str] = mapped_column(Text, nullable=False)
-    user_id: Mapped[str] = mapped_column(Text, nullable=False)
-    from_tier_max: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    to_tier_max: Mapped[int] = mapped_column(Integer, nullable=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    provider_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    tier_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    tier_name: Mapped[str] = mapped_column(Text, nullable=False, default="Tier")
     amount: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
-    tx_ref: Mapped[str] = mapped_column(Text, nullable=False)
-    chapa_status: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payment_status: Mapped[str] = mapped_column(Text, nullable=False, default="success")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class Subscription(Base):
-    """Recurring subscription records for services/customers."""
+    """Provider subscription plan / tier definition."""
 
     __tablename__ = "subscriptions"
 
-    id: Mapped[str] = mapped_column(Text, primary_key=True)
-    customer_id: Mapped[str] = mapped_column(Text, nullable=False)
-    provider_id: Mapped[str] = mapped_column(Text, nullable=False)
-    service_id: Mapped[str] = mapped_column(Text, nullable=False)
-    payment_provider: Mapped[str | None] = mapped_column(Text, nullable=True)
-    external_subscription_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    price: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
-    currency: Mapped[str | None] = mapped_column(Text, nullable=True, default="ETB")
-    billing_interval: Mapped[str] = mapped_column(Text, nullable=False, default="MONTH")
-    billing_interval_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    status: Mapped[str] = mapped_column(Text, nullable=False, default="PENDING")
-    current_period_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    price: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
+    service_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration: Mapped[str | None] = mapped_column(Text, nullable=True, default="1 Month")
+    plan_type: Mapped[str] = mapped_column(Text, nullable=False, default="tier")
+    commission_percent: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
+    is_subscribed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

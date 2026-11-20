@@ -18,7 +18,6 @@ from app.api.v1.schemas.wallet import (
     WithdrawalOut,
 )
 from app.core.security.deps import RequireAuth, RequireProvider
-from app.core.security.payments import require_payment_writes
 from app.core.services import payment_writes
 from app.core.services.wallet_service import WalletService
 from app.persistence.repositories.customer_repo import CustomerRepository
@@ -124,7 +123,6 @@ async def request_withdrawal(
     ctx: RequireProvider,
     service: Annotated[WalletService, Depends(get_wallet_service)],
 ) -> WithdrawalOut:
-    require_payment_writes()
     assert ctx.provider_id is not None
     withdrawal = await service.request_withdrawal(
         provider_id=ctx.provider_id,
@@ -146,7 +144,6 @@ async def cancel_withdrawal(
     ctx: RequireProvider,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> WithdrawalOut:
-    require_payment_writes()
     row = await payment_writes.cancel_pending_withdrawal(db, ctx=ctx, withdrawal_id=withdrawal_id)
     return WithdrawalOut.model_validate(row)
 

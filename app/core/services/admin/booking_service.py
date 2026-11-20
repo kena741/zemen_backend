@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -10,8 +11,10 @@ from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 
+from app.config import settings
 from app.core.notifications.fcm import FCMService, get_fcm_service
 from app.core.security.admin_deps import AdminContext
+from app.core.services import chapa_client
 from app.core.services.admin.audit_service import AdminAuditService
 from app.domain.booking import (
     BookingDetailDomain,
@@ -376,7 +379,26 @@ class BookingAdminService:
             )
 
         ref = f"bkg-{booking_id.hex[:8]}-{secrets.token_hex(4)}"
-        checkout_url = f"https://checkout.chapa.co/checkout/payment/{ref}"
+        customer_email = getattr(b, "customer_email", None) or "customer@example.com"
+        customer_name = getattr(b, "customer_name", None) or "Customer"
+        parts = customer_name.split()
+        first_name = parts[0] if parts else "Customer"
+        last_name = parts[-1] if len(parts) > 1 else "User"
+        callback_url = settings.CHAPA_CALLBACK_URL or f"{settings.API_V1_PREFIX}/admin/bookings/payment/webhook"
+
+        init_res = await chapa_client.initialize_transaction(
+            amount=b.total_amount,
+            currency="ETB",
+            email=customer_email,
+            first_name=first_name,
+            last_name=last_name,
+            tx_ref=ref,
+            phone_number=phone_number,
+            callback_url=callback_url,
+            return_url=settings.CHAPA_RETURN_URL,
+            customization={"title": f"Booking Payment #{str(booking_id)[:8]}"},
+        )
+        checkout_url = init_res.checkout_url
 
         await self.audit_service.log_action(
             action="initiate_payment",
@@ -398,6 +420,7 @@ class BookingAdminService:
     async def verify_payment(
         self,
         booking_id: UUID,
+        tx_ref: str | None = None,
         ctx: AdminContext | None = None,
     ) -> dict[str, Any]:
         b = await self.get_booking(booking_id)
@@ -408,6 +431,15 @@ class BookingAdminService:
                 "booking_id": str(booking_id),
                 "message": "Payment already verified",
             }
+
+        secret = (settings.CHAPA_SECRET_KEY or "").strip()
+        if secret and tx_ref:
+            chapa_res = await chapa_client.verify_tx_ref(tx_ref)
+            if chapa_res.amount < Decimal(str(b.total_amount)):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Paid amount ({chapa_res.amount}) is less than booking total ({b.total_amount})",
+                )
 
         await self.booking_repo.mark_payment_completed(booking_id)
 

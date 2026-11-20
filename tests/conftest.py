@@ -356,6 +356,7 @@ async def seed_provider(db_session: AsyncSession, seed_user):
         password: str = "TestPass123!",
         first_name: str = "Test",
         last_name: str = "Provider",
+        service_tier_max: int = 5,
     ):
         if phone is None:
             phone = f"+2519{secrets.randbelow(90000000) + 10000000}"
@@ -369,7 +370,7 @@ async def seed_provider(db_session: AsyncSession, seed_user):
             phone_number=phone,
             active=True,
             activation_paid=False,
-            service_tier_max=0,
+            service_tier_max=service_tier_max,
             verified_subcategory_ids=[],
             social_links={},
             created_at=datetime.now(timezone.utc),

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 BookingStatus = Literal[
@@ -41,6 +41,7 @@ from app.api.v1.schemas.admin.responses.bookings import (
     CommissionConfigResponse,
 )
 from app.core.security.admin_deps import AdminContext, require_admin_permission
+from app.core.services import chapa_client
 from app.core.services.admin.audit_service import AdminAuditService
 from app.core.services.admin.booking_service import BookingAdminService
 from app.persistence.repositories.activity_log_repo import ActivityLogRepository
@@ -273,15 +274,39 @@ async def verify_payment_body(
     summary="Chapa payment webhook handler",
 )
 async def handle_payment_webhook(
+    request: Request,
     body: BookingPaymentWebhookRequest,
     db: Db,
 ) -> dict[str, Any]:
-    if not body.tx_ref or not body.tx_ref.startswith("bkg-"):
+    sig = request.headers.get("x-chapa-signature") or request.headers.get("chapa-signature")
+    if sig:
+        raw_body = await request.body()
+        if not chapa_client.verify_webhook_signature(raw_body, sig):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Chapa webhook signature")
+
+    tx_ref = body.tx_ref or body.reference
+    if not tx_ref or not tx_ref.startswith("bkg-"):
         return {"status": "ignored"}
-    # tx_ref format: bkg-<booking_hex_8>-<token>
-    # Find booking by checking tx_ref in payments table or status
+
+    status_val = (body.status or "").lower()
     service = _get_booking_service(db)
-    return {"status": "success", "tx_ref": body.tx_ref}
+    if status_val in ("success", "paid"):
+        try:
+            parts = tx_ref.split("-")
+            if len(parts) >= 2:
+                booking_hex = parts[1]
+                from sqlalchemy import String, cast, func, select
+                from app.persistence.sqlalchemy.models.booking import BookedService
+                stmt = select(BookedService).where(func.replace(cast(BookedService.id, String), "-", "").startswith(booking_hex))
+                res = await db.execute(stmt)
+                b = res.scalar_one_or_none()
+                if b:
+                    await service.verify_payment(b.id, tx_ref=tx_ref)
+                    return {"status": "success", "booking_id": str(b.id), "tx_ref": tx_ref}
+        except Exception:
+            pass
+
+    return {"status": "success", "tx_ref": tx_ref}
 
 
 @router.post(

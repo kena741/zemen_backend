@@ -104,9 +104,10 @@ steps:
           --platform managed \
           --port 8080 \
           --quiet \
-          --set-env-vars "ENVIRONMENT=staging,TELEGRAM_AUTO_REGISTER_WEBHOOK=true,SMS_PROVIDER=afromessage,AFRO_SMS_SENDER_NAME=Zemen Serv,AFRO_SMS_IDENTIFIER_ID=e80ad9d8-adf3-463f-80f4-7c4b39f7f164" \
+          --set-env-vars "ENVIRONMENT=staging,TELEGRAM_AUTO_REGISTER_WEBHOOK=true,SMS_PROVIDER=afromessage,AFRO_SMS_SENDER_NAME=Zemen Serv,AFRO_SMS_IDENTIFIER_ID=e80ad9d8-adf3-463f-80f4-7c4b39f7f164,PAYMENTS_WRITES_ENABLED=true" \
           --set-secrets=STAGING_DATABASE_URL=STAGING_DATABASE_URL:latest \
-          --set-secrets=CHAPA_SECRET_KEY=CHAPA_SECRET_KEY:latest \
+          --set-secrets=STAGING_CHAPA_SECRET_KEY=STAGING_CHAPA_SECRET_KEY:latest \
+          --set-secrets=STAGING_CHAPA_WEBHOOK_SECRET=STAGING_CHAPA_WEBHOOK_SECRET:latest \
           --set-secrets=CORS_ALLOWED_ORIGINS=CORS_ALLOWED_ORIGINS:latest \
           --set-secrets=STAGING_TELEGRAM_BOT_TOKEN=STAGING_TELEGRAM_BOT_TOKEN:latest \
           --set-secrets=STAGING_TELEGRAM_WEBHOOK_SECRET=STAGING_TELEGRAM_WEBHOOK_SECRET:latest \

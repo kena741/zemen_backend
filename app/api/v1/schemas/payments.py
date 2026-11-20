@@ -17,6 +17,25 @@ class ChapaVerifyBody(MobileApiSchema):
     booking_id: UUID | None = Field(default=None, alias="bookingId")
 
 
+class ChapaInitializeRequest(MobileApiSchema):
+    amount: float
+    currency: str = "ETB"
+    email: str = "customer@example.com"
+    first_name: str = Field(default="Customer", alias="firstName")
+    last_name: str = Field(default="User", alias="lastName")
+    phone_number: str | None = Field(default=None, alias="phoneNumber")
+    tx_ref: str | None = Field(default=None, alias="txRef")
+    callback_url: str | None = Field(default=None, alias="callbackUrl")
+    return_url: str | None = Field(default=None, alias="returnUrl")
+
+
+class ChapaInitializeResponse(MobileApiSchema):
+    status: str
+    checkout_url: str = Field(serialization_alias="checkoutUrl")
+    tx_ref: str = Field(serialization_alias="txRef")
+    message: str | None = None
+
+
 class PaymentWriteResult(MobileApiSchema):
     purpose: str | None = None
     tx_ref: str | None = Field(default=None, serialization_alias="txRef")
@@ -35,11 +54,29 @@ class ActivationVerifyRequest(MobileApiSchema):
     amount: float = 0.0
 
 
+class SubscriptionPlanOut(MobileApiSchema):
+    id: int
+    title: str
+    description: str | None = None
+    price: float
+    service_limit: int = Field(default=2, serialization_alias="serviceLimit")
+    duration: str | None = "1 Month"
+    plan_type: str = Field(default="tier", serialization_alias="planType")
+    active: bool = True
+
+
+class TierPurchaseInitiateRequest(MobileApiSchema):
+    plan_id: int | None = Field(default=None, alias="planId")
+    tier_max: int | None = Field(default=None, alias="tierMax")
+    callback_url: str | None = Field(default=None, alias="callbackUrl")
+    return_url: str | None = Field(default=None, alias="returnUrl")
+
+
 class TierPaymentVerifyRequest(MobileApiSchema):
     tx_ref: str = Field(alias="txRef")
-    provider_id: UUID = Field(alias="providerId")
-    amount: float = 0.0
-    tier_max: int = Field(default=5, alias="tierMax")
+    provider_id: UUID | None = Field(default=None, alias="providerId")
+    amount: float | None = None
+    tier_max: int | None = Field(default=None, alias="tierMax")
 
 
 class FeaturedPaymentVerifyRequest(MobileApiSchema):
@@ -71,6 +108,10 @@ class BankOut(MobileApiSchema):
     id: str
     name: str
     code: str
+    swift: str | None = None
+    acct_length: int | None = Field(default=None, serialization_alias="acctLength")
+    is_rtgs: bool | None = Field(default=None, serialization_alias="isRtgs")
+    is_mobilemoney: bool | None = Field(default=None, serialization_alias="isMobileMoney")
 
 
 class WithdrawalCreateBody(MobileApiSchema):

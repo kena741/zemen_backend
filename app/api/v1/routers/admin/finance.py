@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.schemas.admin.requests.finance import (
@@ -33,6 +33,7 @@ from app.api.v1.schemas.admin.responses.finance import (
     WithdrawalSingleResponse,
 )
 from app.core.security.admin_deps import AdminContext, require_admin_permission
+from app.core.services import chapa_client
 from app.core.services.admin.audit_service import AdminAuditService
 from app.core.services.admin.finance_service import FinanceAdminService
 from app.persistence.repositories.activity_log_repo import ActivityLogRepository
@@ -210,9 +211,15 @@ async def chapa_verify_transfer(
     include_in_schema=False,
 )
 async def chapa_webhook(
+    request: Request,
     body: ChapaWebhookPayload,
     db: Db,
 ) -> dict[str, Any]:
+    sig = request.headers.get("x-chapa-signature") or request.headers.get("chapa-signature")
+    if sig:
+        raw_body = await request.body()
+        if not chapa_client.verify_webhook_signature(raw_body, sig):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Chapa webhook signature")
     service = _get_finance_service(db)
     return await service.handle_chapa_webhook(payload=body.model_dump())
 

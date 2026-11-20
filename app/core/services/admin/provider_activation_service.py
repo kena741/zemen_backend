@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import datetime, timezone
 from typing import Any
@@ -9,7 +10,9 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
+from app.config import settings
 from app.core.security.admin_deps import AdminContext
+from app.core.services import chapa_client
 from app.core.services.admin.audit_service import AdminAuditService
 from app.persistence.repositories.provider_repo import ProviderRepository
 
@@ -79,7 +82,24 @@ class ProviderActivationAdminService:
         # Chapa checkout mode
         await self.provider_repo.update(provider_id, {"activation_tx_ref": ref, "updated_at": now})
 
-        checkout_url = f"https://checkout.chapa.co/checkout/payment/{ref}"
+        parts = (provider.full_name or "Provider").split()
+        first_name = parts[0] if parts else "Provider"
+        last_name = parts[-1] if len(parts) > 1 else "User"
+        email = provider.email or "provider@example.com"
+        callback_url = settings.CHAPA_CALLBACK_URL or f"{settings.API_V1_PREFIX}/payments/provider-activation/webhook"
+        init_res = await chapa_client.initialize_transaction(
+            amount=fee_amount,
+            currency="ETB",
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            tx_ref=ref,
+            callback_url=callback_url,
+            return_url=settings.CHAPA_RETURN_URL,
+            customization={"title": "Provider Activation Fee"},
+        )
+        checkout_url = init_res.checkout_url
+
         return {
             "status": "pending",
             "mode": "chapa",
@@ -107,6 +127,10 @@ class ProviderActivationAdminService:
                 "provider_id": str(provider_id),
                 "activation_paid_at": provider.activation_paid_at.isoformat() if provider.activation_paid_at else None,
             }
+
+        secret = (settings.CHAPA_SECRET_KEY or "").strip()
+        if secret and provider.activation_tx_ref:
+            await chapa_client.verify_tx_ref(provider.activation_tx_ref)
 
         now = datetime.now(timezone.utc)
         await self.provider_repo.update(

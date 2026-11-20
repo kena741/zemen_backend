@@ -113,6 +113,77 @@ def test_chapa_verifications(api_client, mock_payment_service):
     assert res_feat.status_code == 200
     assert res_feat.json()["feature"] is True
 
+    # Chapa initialize checkout test
+    mock_payment_service.initialize_payment = AsyncMock(
+        return_value={
+            "status": "success",
+            "checkout_url": "https://checkout.chapa.co/checkout/web/mock123",
+            "tx_ref": "tx-init-test",
+            "message": "Hosted Link",
+        }
+    )
+    res_init = client.post(
+        "/api/v1/payments/chapa/initialize",
+        json={
+            "amount": 250.0,
+            "currency": "ETB",
+            "email": "test@user.com",
+            "firstName": "John",
+            "lastName": "Doe",
+            "txRef": "tx-init-test",
+        },
+    )
+    assert res_init.status_code == 200
+    assert res_init.json()["checkoutUrl"] == "https://checkout.chapa.co/checkout/web/mock123"
+    assert res_init.json()["txRef"] == "tx-init-test"
+
+    # GET /plans test
+    mock_payment_service.list_subscription_plans = AsyncMock(
+        return_value=[
+            {
+                "id": 1,
+                "title": "Starter Plan",
+                "description": "Up to 2 services",
+                "price": 500.0,
+                "service_limit": 2,
+                "duration": "1 Month",
+                "plan_type": "tier",
+                "active": True,
+            }
+        ]
+    )
+    res_plans = client.get("/api/v1/payments/plans")
+    assert res_plans.status_code == 200
+    assert len(res_plans.json()) == 1
+    assert res_plans.json()[0]["serviceLimit"] == 2
+
+    # POST /service-tier/initiate test
+    mock_payment_service.initiate_tier_purchase = AsyncMock(
+        return_value={
+            "status": "success",
+            "checkout_url": "https://checkout.chapa.co/checkout/web/tier-init-123",
+            "tx_ref": "tier-prov-123",
+            "message": "Hosted Link",
+        }
+    )
+    provider_ctx = AuthContext(
+        user_id=uuid4(),
+        email="provider@example.com",
+        roles=["provider"],
+        provider_id=prov_id,
+    )
+    prov_client = api_client(auth_context=provider_ctx)
+    prov_client.app.dependency_overrides[get_chapa_payment_service] = lambda: mock_payment_service
+
+    res_tier_init = prov_client.post(
+        "/api/v1/payments/service-tier/initiate",
+        json={"planId": 1},
+    )
+    assert res_tier_init.status_code == 200
+    assert res_tier_init.json()["checkoutUrl"] == "https://checkout.chapa.co/checkout/web/tier-init-123"
+    assert res_tier_init.json()["txRef"] == "tier-prov-123"
+
+
 
 def test_wallet_balance_and_transactions(api_client, mock_wallet_service):
     user_id = uuid4()

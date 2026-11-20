@@ -81,10 +81,34 @@ class Settings(BaseSettings):
     SUPABASE_JWT_USE_JWKS: bool = False
     SUPABASE_SERVICE_ROLE_KEY: str = ""
 
-    # Plan 4: money writes stay off until ledger parity + Edge cutover.
-    PAYMENTS_WRITES_ENABLED: bool = False
+    # Primary money writer: backend handles payouts, refunds, withdrawals, and plan purchases.
+    PAYMENTS_WRITES_ENABLED: bool = True
+
+    # Chapa Gateway - Environment-specific secrets
+    DEVELOPMENT_CHAPA_SECRET_KEY: str | None = None
+    DEVELOPMENT_CHAPA_PUBLIC_KEY: str | None = None
+    DEVELOPMENT_CHAPA_WEBHOOK_SECRET: str | None = None
+
+    STAGING_CHAPA_SECRET_KEY: str | None = None
+    STAGING_CHAPA_PUBLIC_KEY: str | None = None
+    STAGING_CHAPA_WEBHOOK_SECRET: str | None = None
+
+    PRODUCTION_CHAPA_SECRET_KEY: str | None = None
+    PRODUCTION_CHAPA_PUBLIC_KEY: str | None = None
+    PRODUCTION_CHAPA_WEBHOOK_SECRET: str | None = None
+
+    # Active Chapa configuration (resolved based on ENVIRONMENT)
     CHAPA_SECRET_KEY: str = ""
+    CHAPA_PUBLIC_KEY: str = ""
+    CHAPA_WEBHOOK_SECRET: str = ""
+    CHAPA_INITIALIZE_URL: str = "https://api.chapa.co/v1/transaction/initialize"
     CHAPA_VERIFY_URL: str = "https://api.chapa.co/v1/transaction/verify"
+    CHAPA_TRANSFERS_URL: str = "https://api.chapa.co/v1/transfers"
+    CHAPA_BANKS_URL: str = "https://api.chapa.co/v1/banks"
+    CHAPA_BALANCES_URL: str = "https://api.chapa.global/v2/balances"
+    CHAPA_CALLBACK_URL: str | None = None
+    CHAPA_RETURN_URL: str | None = None
+    CHAPA_BANKS_CACHE_TTL_SECONDS: int = 3600
 
     # Custom Auth (JWT)
     JWT_SECRET_KEY: str = "insecure-change-me-in-production-jwt-secret-key-32chars"
@@ -264,6 +288,50 @@ class Settings(BaseSettings):
             self.TELEGRAM_WEBHOOK_URL = (
                 self.PRODUCTION_TELEGRAM_WEBHOOK_URL
                 or self.TELEGRAM_WEBHOOK_URL
+            )
+        return self
+
+    @model_validator(mode="after")
+    def resolve_chapa_configuration(self) -> "Settings":
+        """Resolves active Chapa configuration based on ENVIRONMENT."""
+        if self.ENVIRONMENT == EnvironmentOptions.DEVELOPMENT:
+            self.CHAPA_SECRET_KEY = (
+                self.DEVELOPMENT_CHAPA_SECRET_KEY
+                or self.CHAPA_SECRET_KEY
+            )
+            self.CHAPA_PUBLIC_KEY = (
+                self.DEVELOPMENT_CHAPA_PUBLIC_KEY
+                or self.CHAPA_PUBLIC_KEY
+            )
+            self.CHAPA_WEBHOOK_SECRET = (
+                self.DEVELOPMENT_CHAPA_WEBHOOK_SECRET
+                or self.CHAPA_WEBHOOK_SECRET
+            )
+        elif self.ENVIRONMENT == EnvironmentOptions.STAGING:
+            self.CHAPA_SECRET_KEY = (
+                self.STAGING_CHAPA_SECRET_KEY
+                or self.CHAPA_SECRET_KEY
+            )
+            self.CHAPA_PUBLIC_KEY = (
+                self.STAGING_CHAPA_PUBLIC_KEY
+                or self.CHAPA_PUBLIC_KEY
+            )
+            self.CHAPA_WEBHOOK_SECRET = (
+                self.STAGING_CHAPA_WEBHOOK_SECRET
+                or self.CHAPA_WEBHOOK_SECRET
+            )
+        elif self.ENVIRONMENT == EnvironmentOptions.PRODUCTION:
+            self.CHAPA_SECRET_KEY = (
+                self.PRODUCTION_CHAPA_SECRET_KEY
+                or self.CHAPA_SECRET_KEY
+            )
+            self.CHAPA_PUBLIC_KEY = (
+                self.PRODUCTION_CHAPA_PUBLIC_KEY
+                or self.CHAPA_PUBLIC_KEY
+            )
+            self.CHAPA_WEBHOOK_SECRET = (
+                self.PRODUCTION_CHAPA_WEBHOOK_SECRET
+                or self.CHAPA_WEBHOOK_SECRET
             )
         return self
 

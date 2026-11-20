@@ -14,34 +14,26 @@ from app.core.services.payment_writes import refund_booking, refund_note
 from app.config import settings
 
 
-def test_payment_status_reports_disabled():
+def test_payment_status_reports_enabled():
     client = TestClient(create_app())
     resp = client.get("/api/v1/payments/status")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["enabled"] is False
+    assert body["enabled"] is True
     assert body["chapaConfigured"] is False or "chapaConfigured" in body
 
 
-def test_payment_writes_are_503_while_gated():
-    assert settings.PAYMENTS_WRITES_ENABLED is False
-    app = create_app()
-    uid = uuid4()
+def test_require_payment_writes_helper(monkeypatch):
+    import pytest
+    from app.core.security.payments import require_payment_writes
 
-    async def _ctx():
-        return AuthContext(user_id=uid, email="a@b.com", roles=["customer"], customer_id=uid)
+    monkeypatch.setattr(settings, "PAYMENTS_WRITES_ENABLED", False)
+    with pytest.raises(HTTPException) as exc_info:
+        require_payment_writes()
+    assert exc_info.value.status_code == 503
 
-    from app.core.security.deps import get_auth_context
-
-    app.dependency_overrides[get_auth_context] = lambda: AuthContext(
-        user_id=uid, email="a@b.com", roles=["customer", "provider"], customer_id=uid, provider_id=uid
-    )
-    client = TestClient(app)
-    bid = str(uuid4())
-    assert client.post("/api/v1/payments/chapa/verify", json={"txRef": "tx-123456", "purpose": "wallet"}).status_code == 503
-    assert client.post(f"/api/v1/payments/bookings/{bid}/refund").status_code == 503
-    assert client.post(f"/api/v1/payments/bookings/{bid}/complete").status_code == 503
-    assert client.post("/api/v1/wallet/withdrawals", json={"amount": "10"}).status_code == 503
+    monkeypatch.setattr(settings, "PAYMENTS_WRITES_ENABLED", True)
+    require_payment_writes()  # does not raise
 
 
 def test_commission_uses_numeric_booking_amount_not_object():
@@ -52,9 +44,10 @@ def test_commission_uses_numeric_booking_amount_not_object():
     assert provider_net(gross, booking_commission=None, rule=None) == Decimal("100")
 
 
-def test_chapa_rejects_bad_ref_and_missing_env():
+def test_chapa_rejects_bad_ref_and_missing_env(monkeypatch):
     import asyncio
 
+    monkeypatch.setattr(settings, "CHAPA_SECRET_KEY", "")
     try:
         asyncio.run(verify_tx_ref("bad"))
         raise AssertionError("expected invalid ref")

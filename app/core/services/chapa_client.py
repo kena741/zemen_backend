@@ -200,9 +200,14 @@ async def initialize_transaction(
 
     if code not in (200, 201):
         msg = body.get("message") or "Chapa payment initialization failed"
+        # Include field-level validation errors if present (Chapa returns them at top level)
+        field_errors = {k: v for k, v in body.items() if k not in ("message", "status", "data")}
+        detail = f"Chapa API error ({code}): {msg}"
+        if field_errors:
+            detail = f"Chapa API error ({code}): {field_errors}"
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Chapa API error ({code}): {msg}",
+            detail=detail,
         )
 
     data = body.get("data") if isinstance(body.get("data"), dict) else {}

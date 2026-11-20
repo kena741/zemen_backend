@@ -290,8 +290,10 @@ class ChapaPaymentService:
         except Exception as exc:
             logger.warning("Failed to record pending ServiceTierPayment: %s", exc)
 
+        import re as _re
+        _EMAIL_RE = _re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
         provider_email = getattr(provider, "email", None)
-        if provider_email and "@" not in provider_email:
+        if provider_email and not _EMAIL_RE.match(str(provider_email).strip()):
             provider_email = None
 
         raw_phone = getattr(provider, "phone_number", None)

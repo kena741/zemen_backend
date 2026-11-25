@@ -325,6 +325,8 @@ class ChapaPaymentService:
         provider_id: UUID | None = None,
         amount: float | None = None,
         target_tier: int | None = None,
+        *,
+        skip_gateway_verify: bool = False,
     ) -> dict[str, Any]:
         tx_clean = tx_ref.strip()
         session = getattr(self.provider_repo, "session", None)
@@ -347,6 +349,20 @@ class ChapaPaymentService:
         if not provider:
             raise EntityNotFoundError("Provider", provider_id)
 
+        # Idempotent: already applied for this tx
+        if (
+            provider.service_tier_tx_ref == tx_clean
+            and target_tier is not None
+            and provider.service_tier_max >= target_tier
+        ):
+            return {
+                "status": "success",
+                "message": f"Service tier already at {provider.service_tier_max}.",
+                "service_tier_max": provider.service_tier_max,
+                "provider_id": str(provider_id),
+                "tx_ref": tx_clean,
+            }
+
         # 2. Resolve target_tier and expected amount from pending record if omitted
         pending_record: ServiceTierPayment | None = None
         if (target_tier is None or amount is None) and session:
@@ -367,10 +383,20 @@ class ChapaPaymentService:
             except Exception as exc:
                 logger.warning("Error resolving pending tier payment: %s", exc)
 
-        # 3. Verify transaction with Chapa
-        verify_res = await self.verify_chapa_tx(tx_clean, expected_amount=amount)
-        if verify_res.get("status") != "success":
-            raise PaymentProcessingError("Chapa tier payment verification failed.")
+        # 3. Verify transaction with Chapa (or trust Next after Telebirr queryOrder)
+        if skip_gateway_verify:
+            if target_tier is None:
+                raise ValidationError("tierMax is required when skipGatewayVerify is set.")
+            verify_res = {
+                "status": "success",
+                "tx_ref": tx_clean,
+                "amount": float(amount or 0.0),
+                "currency": "ETB",
+            }
+        else:
+            verify_res = await self.verify_chapa_tx(tx_clean, expected_amount=amount)
+            if verify_res.get("status") != "success":
+                raise PaymentProcessingError("Chapa tier payment verification failed.")
 
         # 4. If target_tier is still None, attempt to match verified amount against plans
         if target_tier is None:

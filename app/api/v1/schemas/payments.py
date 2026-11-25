@@ -77,6 +77,8 @@ class TierPaymentVerifyRequest(MobileApiSchema):
     provider_id: UUID | None = Field(default=None, alias="providerId")
     amount: float | None = None
     tier_max: int | None = Field(default=None, alias="tierMax")
+    # Set by Next after Telebirr queryOrder succeeds; requires X-Zemen-Pay-Sig.
+    skip_gateway_verify: bool = Field(default=False, alias="skipGatewayVerify")
 
 
 class FeaturedPaymentVerifyRequest(MobileApiSchema):

@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.domain.settings import MobileAppConfigDomain
 from app.persistence.repositories.base import BaseRepository
@@ -44,10 +45,24 @@ class MobileAppConfigRepository(BaseRepository[MobileAppConfig, MobileAppConfigD
         clean = {k: v for k, v in updates.items() if v is not None}
         clean["updated_at"] = now
 
+        insert_values: dict[str, Any] = {
+            "app_key": app_key,
+            "maintenance_mode": False,
+            "maintenance_affected_versions": [],
+            "update_needed": False,
+            "update_affected_versions": [],
+            "created_at": now,
+            "updated_at": now,
+            **clean,
+        }
+
         stmt = (
-            update(self.model)
-            .where(self.model.app_key == app_key)
-            .values(**clean)
+            pg_insert(self.model)
+            .values(**insert_values)
+            .on_conflict_do_update(
+                index_elements=[self.model.app_key],
+                set_=clean,
+            )
             .returning(self.model)
         )
         res = await self.session.execute(stmt)

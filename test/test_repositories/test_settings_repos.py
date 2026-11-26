@@ -100,6 +100,9 @@ async def test_mobile_app_config_repo_lifecycle():
     updated = await repo.update_config("customer_app", {"maintenance_mode": True})
     assert updated is not None
 
+    upserted = await repo.update_config("zemen_web", {"update_needed": False})
+    assert upserted is not None
+
 
 @pytest.mark.asyncio
 async def test_coupon_repo_lifecycle():

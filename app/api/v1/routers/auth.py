@@ -143,7 +143,7 @@ async def login(
     service: Annotated[MobileAuthService, Depends(get_mobile_auth_service)],
 ) -> AuthSessionResponse:
     session = await service.login(
-        identifier=body.identifier or body.email or body.phone or "",
+        identifier=body.email or body.phone or "",
         password=body.password,
     )
     return AuthSessionResponse(
@@ -169,7 +169,7 @@ async def login_customer(
     service: Annotated[MobileAuthService, Depends(get_mobile_auth_service)],
 ) -> AuthSessionResponse:
     session = await service.login(
-        identifier=body.identifier or body.email or body.phone or "",
+        identifier=body.email or body.phone or "",
         password=body.password,
         expected_role="customer",
     )
@@ -196,7 +196,7 @@ async def login_provider(
     service: Annotated[MobileAuthService, Depends(get_mobile_auth_service)],
 ) -> AuthSessionResponse:
     session = await service.login(
-        identifier=body.identifier or body.email or body.phone or "",
+        identifier=body.email or body.phone or "",
         password=body.password,
         expected_role="provider",
     )

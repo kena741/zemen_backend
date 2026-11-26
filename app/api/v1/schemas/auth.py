@@ -40,17 +40,14 @@ class ProviderSignupRequest(MobileApiSchema):
 
 
 class LoginRequest(MobileApiSchema):
-    identifier: str | None = None
     email: str | None = None
     phone: str | None = None
     password: str = Field(min_length=1)
 
     @model_validator(mode="after")
-    def resolve_identifier(self) -> "LoginRequest":
-        if not self.identifier:
-            self.identifier = self.email or self.phone
-        if not self.identifier:
-            raise ValueError("Either 'identifier', 'email', or 'phone' must be provided.")
+    def validate_email_or_phone(self) -> "LoginRequest":
+        if not self.email and not self.phone:
+            raise ValueError("Either 'email' or 'phone' must be provided.")
         return self
 
 

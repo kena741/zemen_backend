@@ -72,7 +72,6 @@ async def list_customer_bookings(
     ctx: RequireCustomer,
     service: Annotated[MobileBookingService, Depends(get_mobile_booking_service)],
     status: str | None = Query(None),
-    include_archived: bool = Query(False, alias="includeArchived"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> Page[BookingOut]:
@@ -80,7 +79,6 @@ async def list_customer_bookings(
     rows = await service.list_customer_bookings(
         customer_id=ctx.customer_id,
         status=status,
-        include_archived=include_archived,
         limit=limit,
         offset=offset,
     )
@@ -123,7 +121,6 @@ async def list_provider_bookings(
     status: str | None = Query(None),
     is_upcoming: bool = Query(False, alias="isUpcoming"),
     is_completed: bool = Query(False, alias="isCompleted"),
-    include_archived: bool = Query(False, alias="includeArchived"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> Page[BookingOut]:
@@ -133,7 +130,6 @@ async def list_provider_bookings(
         status=status,
         is_upcoming=is_upcoming,
         is_completed=is_completed,
-        include_archived=include_archived,
         limit=limit,
         offset=offset,
     )

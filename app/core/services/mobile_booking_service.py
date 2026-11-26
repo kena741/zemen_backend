@@ -93,14 +93,12 @@ class MobileBookingService:
         self,
         customer_id: UUID,
         status: str | None = None,
-        include_archived: bool = False,
         limit: int = 50,
         offset: int = 0,
     ) -> list[BookingDomain]:
         return await self.booking_repo.list_for_customer(
             customer_id=customer_id,
             status=status,
-            include_archived=include_archived,
             limit=limit,
             offset=offset,
         )
@@ -111,7 +109,6 @@ class MobileBookingService:
         status: str | None = None,
         is_upcoming: bool = False,
         is_completed: bool = False,
-        include_archived: bool = False,
         limit: int = 50,
         offset: int = 0,
     ) -> list[BookingDomain]:
@@ -120,7 +117,6 @@ class MobileBookingService:
             status=status,
             is_upcoming=is_upcoming,
             is_completed=is_completed,
-            include_archived=include_archived,
             limit=limit,
             offset=offset,
         )

@@ -221,13 +221,10 @@ class MobileBookingRepository(BaseRepository[BookedService, BookingDomain]):
         self,
         customer_id: UUID,
         status: str | None = None,
-        include_archived: bool = False,
         limit: int = 50,
         offset: int = 0,
     ) -> list[BookingDomain]:
         stmt = select(BookedService).where(BookedService.customer_id == customer_id)
-        if not include_archived:
-            stmt = stmt.where(BookedService.is_archived.is_(False))
         if status:
             stmt = stmt.where(BookedService.status == status)
 
@@ -241,13 +238,10 @@ class MobileBookingRepository(BaseRepository[BookedService, BookingDomain]):
         status: str | None = None,
         is_upcoming: bool = False,
         is_completed: bool = False,
-        include_archived: bool = False,
         limit: int = 50,
         offset: int = 0,
     ) -> list[BookingDomain]:
         stmt = select(BookedService).where(BookedService.provider_id == provider_id)
-        if not include_archived:
-            stmt = stmt.where(BookedService.is_archived.is_(False))
 
         if is_upcoming:
             # Upcoming bookings: status pending, accepted, on_going, hold

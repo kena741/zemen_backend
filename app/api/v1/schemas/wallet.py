@@ -13,7 +13,7 @@ from app.api.v1.schemas.base import MobileApiSchema
 
 class WalletTransactionOut(MobileApiSchema):
     id: UUID
-    amount: str | None = None
+    amount: str | float | Decimal | None = None
     created_date: datetime | None = Field(default=None, serialization_alias="createdDate")
     is_credit: bool | None = Field(default=None, serialization_alias="isCredit")
     note: str | None = None

@@ -11,6 +11,8 @@ from sqlalchemy.exc import (
     TimeoutError as SQLAlchemyTimeoutError,
 )
 
+from app.config import EnvironmentOptions, settings
+
 from app.domain.exceptions import (
     AuthenticationError,
     DomainException,
@@ -189,9 +191,12 @@ def register_exception_handlers(app: FastAPI) -> FastAPI:
             exc,
             exc_info=True,
         )
+        details: dict[str, str] = {}
+        if settings.ENVIRONMENT != EnvironmentOptions.PRODUCTION:
+            details["detail"] = str(exc)
         return JSONResponse(
             status_code=500,
-            content={"message": "Internal Server Error", "details": {}},
+            content={"message": "Internal Server Error", "details": details},
         )
 
     return app

@@ -145,7 +145,10 @@ async def test_generic_sqlalchemy_error_returns_500_without_sql():
 
 
 @pytest.mark.asyncio
-async def test_unhandled_exception_does_not_leak_detail():
+async def test_unhandled_exception_does_not_leak_detail_in_production(monkeypatch):
+    from app.config import EnvironmentOptions, settings
+
+    monkeypatch.setattr(settings, "ENVIRONMENT", EnvironmentOptions.PRODUCTION)
     app = _build_test_app()
     async with AsyncClient(transport=ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test") as client:
         resp = await client.get("/boom")
@@ -153,6 +156,44 @@ async def test_unhandled_exception_does_not_leak_detail():
     body = resp.json()
     assert body == {"message": "Internal Server Error", "details": {}}
     assert "sensitive internal stack info" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_unhandled_exception_includes_detail_in_non_production(monkeypatch):
+    from app.config import EnvironmentOptions, settings
+
+    monkeypatch.setattr(settings, "ENVIRONMENT", EnvironmentOptions.DEVELOPMENT)
+    app = _build_test_app()
+    async with AsyncClient(transport=ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test") as client:
+        resp = await client.get("/boom")
+    assert resp.status_code == 500
+    body = resp.json()
+    assert body["message"] == "Internal Server Error"
+    assert body["details"]["detail"] == "sensitive internal stack info"
+
+
+def test_wallet_transaction_out_accepts_decimal_amount():
+    from decimal import Decimal
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.api.v1.schemas.wallet import WalletTransactionOut
+
+    row = SimpleNamespace(
+        id=uuid4(),
+        amount=Decimal("125.00"),
+        created_date=None,
+        is_credit=True,
+        note="Deposit",
+        payment_type="chapa",
+        transaction_id="tx_1",
+        type="credit",
+        user_id=uuid4(),
+        provider_id=None,
+        customer_id=uuid4(),
+    )
+    out = WalletTransactionOut.model_validate(row)
+    assert out.amount == Decimal("125.00")
 
 
 @pytest.mark.asyncio

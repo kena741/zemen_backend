@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.core.auth.hashing import hash_password
+from app.core.auth.hashing import hash_password, verify_password
 from app.core.sms.otp_engine import OtpEngine
 from app.core.sms.provider import MockSMSProvider
 from app.core.services.mobile_auth_service import MobileAuthService
@@ -20,6 +20,7 @@ from app.domain.customer import CustomerDomain
 from app.domain.exceptions import (
     AuthenticationError,
     EntityConflictError,
+    EntityNotFoundError,
     ValidationError,
 )
 from app.domain.provider import ProviderDomain
@@ -158,4 +159,135 @@ async def test_login_invalid_password(auth_service):
 
     with pytest.raises(AuthenticationError):
         await service.login("test@example.com", "wrong_password")
+
+
+@pytest.mark.asyncio
+async def test_reset_password_by_phone_success(auth_service):
+    service, sms_provider, _, (auth_repo, _, _, _) = auth_service
+    user_id = uuid4()
+    phone = "0911223344"
+
+    auth_repo.get_by_phone.return_value = MobileUserCredentialsDomain(
+        id=user_id,
+        phone="+251911223344",
+        hashed_password=hash_password("old_pass"),
+        is_active=True,
+    )
+
+    v_id, code = await service.send_phone_otp(phone=phone)
+    ok = await service.reset_password_by_phone(
+        phone=phone,
+        code=code,
+        new_password="new_secure_password",
+        verification_id=v_id,
+    )
+    assert ok is True
+    auth_repo.update_password.assert_awaited_once()
+    updated_uid, updated_hash = auth_repo.update_password.call_args.args
+    assert updated_uid == user_id
+    assert verify_password("new_secure_password", updated_hash)
+    auth_repo.revoke_refresh_tokens.assert_awaited_once_with(user_id)
+
+
+@pytest.mark.asyncio
+async def test_reset_password_by_phone_invalid_otp_and_missing_user(auth_service):
+    service, _, _, (auth_repo, _, _, _) = auth_service
+    phone = "0911223344"
+    v_id, code = await service.send_phone_otp(phone=phone)
+
+    # Wrong OTP -> ValidationError, password is NOT updated
+    with pytest.raises(ValidationError):
+        await service.reset_password_by_phone(
+            phone=phone,
+            code="999999",
+            new_password="new_secure_password",
+            verification_id=v_id,
+        )
+    assert not auth_repo.update_password.called
+
+    # Valid OTP but user not found -> EntityNotFoundError
+    auth_repo.get_by_phone.return_value = None
+    with pytest.raises(EntityNotFoundError):
+        await service.reset_password_by_phone(
+            phone=phone,
+            code=code,
+            new_password="new_secure_password",
+            verification_id=v_id,
+        )
+    assert not auth_repo.update_password.called
+
+
+@pytest.mark.asyncio
+async def test_login_duplicate_phone_picks_matching_password_candidate(auth_service):
+    service, _, _, (auth_repo, customer_repo, provider_repo, handyman_repo) = auth_service
+    uid_1, uid_2 = uuid4(), uuid4()
+    prov_2_id = uuid4()
+
+    auth_repo.list_by_email_or_phone.return_value = [
+        MobileUserCredentialsDomain(
+            id=uid_1,
+            email="hannah78@gmail.com",
+            phone="+251951175959",
+            hashed_password=hash_password("first_pass"),
+            is_active=True,
+        ),
+        MobileUserCredentialsDomain(
+            id=uid_2,
+            email="hanna77@gmail.com",
+            phone="+251951175959",
+            hashed_password=hash_password("second_pass"),
+            is_active=True,
+        ),
+    ]
+    customer_repo.get_by_user_id.return_value = None
+    provider_repo.get_by_user_id.return_value = ProviderDomain(
+        id=prov_2_id,
+        user_id=uid_2,
+        first_name="Hana",
+        last_name="Tame",
+        phone_number="+251951175959",
+    )
+    handyman_repo.get_by_user_id.return_value = None
+
+    session = await service.login("0951175959", "second_pass", expected_role="provider")
+    assert session.user_id == uid_2
+    assert session.provider_id == prov_2_id
+    assert "provider" in session.roles
+
+
+@pytest.mark.asyncio
+async def test_signup_provider_attaches_to_existing_customer_user(auth_service):
+    service, _, _, (auth_repo, customer_repo, provider_repo, _) = auth_service
+    existing_uid = uuid4()
+    existing_cust_id = uuid4()
+
+    auth_repo.get_by_email.return_value = MobileUserCredentialsDomain(
+        id=existing_uid,
+        email="dual@example.com",
+        phone="+251911223344",
+        hashed_password=hash_password("shared_pass"),
+        is_active=True,
+    )
+    customer_repo.get_by_user_id.return_value = CustomerDomain(
+        id=existing_cust_id,
+        user_id=existing_uid,
+        first_name="Dual",
+        last_name="User",
+        phone="+251911223344",
+    )
+    provider_repo.get_by_user_id.return_value = None
+
+    cmd = ProviderSignupDomain(
+        email="dual@example.com",
+        password="shared_pass",
+        first_name="Dual",
+        last_name="User",
+        phone="0911223344",
+    )
+    session = await service.signup_provider(cmd)
+    assert session.user_id == existing_uid
+    assert session.provider_id is not None
+    assert set(session.roles) == {"customer", "provider"}
+    assert not auth_repo.create_user.called
+    assert provider_repo.create_provider.called
 

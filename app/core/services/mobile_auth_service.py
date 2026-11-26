@@ -52,33 +52,67 @@ class MobileAuthService:
         self.sms_provider = sms_provider or get_sms_provider()
         self.otp_engine = otp_engine or get_otp_engine()
 
-    async def signup_customer(self, command: CustomerSignupDomain) -> AuthSessionDomain:
-        """Register a new customer, persist profile, and issue auth tokens."""
-        norm_phone = normalize_ethiopian_phone(command.phone)
+    async def _resolve_or_create_user_for_signup(
+        self,
+        email: str | None,
+        norm_phone: str,
+        password: str,
+        target_role: str,
+    ) -> tuple[UUID, list[str]]:
+        """Return (user_id, existing_roles) or create a new User if none exists.
 
-        # 1. Check for conflicts
-        if command.email:
-            existing_email = await self.auth_repo.get_by_email(command.email)
-            if existing_email:
-                raise EntityConflictError(f"Email '{command.email}' is already registered.")
+        Allows an existing Customer to attach a Provider profile (and vice versa)
+        using the same email/phone when they supply their existing password.
+        """
+        existing: MobileUserCredentialsDomain | None = None
+        if email:
+            existing = await self.auth_repo.get_by_email(email)
+        if not existing:
+            existing = await self.auth_repo.get_by_phone(norm_phone)
 
-        existing_phone = await self.auth_repo.get_by_phone(norm_phone)
-        if existing_phone:
-            raise EntityConflictError(f"Phone number '{command.phone}' is already registered.")
+        if existing:
+            existing_cust = await self.customer_repo.get_by_user_id(existing.id)
+            existing_prov = await self.provider_repo.get_by_user_id(existing.id)
+            if target_role == "customer" and existing_cust is not None:
+                raise EntityConflictError("A customer account with this email or phone is already registered.")
+            if target_role == "provider" and existing_prov is not None:
+                raise EntityConflictError("A provider account with this email or phone is already registered.")
 
-        # 2. Create canonical user record
+            if not existing.hashed_password or not verify_password(password, existing.hashed_password):
+                raise EntityConflictError(
+                    "Email or phone is already registered. Use your existing password to add this role."
+                )
+
+            roles: list[str] = []
+            if existing_cust:
+                roles.append("customer")
+            if existing_prov:
+                roles.append("provider")
+            return existing.id, roles
+
         user_id = uuid4()
         user_cred = MobileUserCredentialsDomain(
             id=user_id,
-            email=command.email.lower().strip() if command.email else None,
+            email=email.lower().strip() if email else None,
             phone=norm_phone,
-            hashed_password=hash_password(command.password),
+            hashed_password=hash_password(password),
             is_active=True,
             phone_confirmed_at=datetime.now(timezone.utc),
         )
         await self.auth_repo.create_user(user_cred)
+        return user_id, []
 
-        # 3. Create linked customer profile
+    async def signup_customer(self, command: CustomerSignupDomain) -> AuthSessionDomain:
+        """Register a new customer, persist profile, and issue auth tokens."""
+        norm_phone = normalize_ethiopian_phone(command.phone)
+        user_id, existing_roles = await self._resolve_or_create_user_for_signup(
+            email=command.email,
+            norm_phone=norm_phone,
+            password=command.password,
+            target_role="customer",
+        )
+
+        # Create linked customer profile
         customer_id = uuid4()
         customer = CustomerDomain(
             id=customer_id,
@@ -98,11 +132,11 @@ class MobileAuthService:
         )
         await self.customer_repo.create_customer(customer)
 
-        # 4. Issue session tokens
+        roles = list(dict.fromkeys([*existing_roles, "customer"]))
         return await self._issue_session(
             user_id=user_id,
             email=command.email,
-            roles=["customer"],
+            roles=roles,
             customer_id=customer_id,
             user_data={
                 "id": str(user_id),
@@ -117,30 +151,14 @@ class MobileAuthService:
     async def signup_provider(self, command: ProviderSignupDomain) -> AuthSessionDomain:
         """Register a new provider, persist profile, and issue auth tokens."""
         norm_phone = normalize_ethiopian_phone(command.phone)
-
-        # 1. Conflict check
-        if command.email:
-            existing_email = await self.auth_repo.get_by_email(command.email)
-            if existing_email:
-                raise EntityConflictError(f"Email '{command.email}' is already registered.")
-
-        existing_phone = await self.auth_repo.get_by_phone(norm_phone)
-        if existing_phone:
-            raise EntityConflictError(f"Phone number '{command.phone}' is already registered.")
-
-        # 2. Create canonical user record
-        user_id = uuid4()
-        user_cred = MobileUserCredentialsDomain(
-            id=user_id,
-            email=command.email.lower().strip() if command.email else None,
-            phone=norm_phone,
-            hashed_password=hash_password(command.password),
-            is_active=True,
-            phone_confirmed_at=datetime.now(timezone.utc),
+        user_id, existing_roles = await self._resolve_or_create_user_for_signup(
+            email=command.email,
+            norm_phone=norm_phone,
+            password=command.password,
+            target_role="provider",
         )
-        await self.auth_repo.create_user(user_cred)
 
-        # 3. Create linked provider profile
+        # Create linked provider profile
         provider_id = uuid4()
         provider = ProviderDomain(
             id=provider_id,
@@ -163,11 +181,11 @@ class MobileAuthService:
         )
         await self.provider_repo.create_provider(provider)
 
-        # 4. Issue session tokens
+        roles = list(dict.fromkeys([*existing_roles, "provider"]))
         return await self._issue_session(
             user_id=user_id,
             email=command.email,
-            roles=["provider"],
+            roles=roles,
             provider_id=provider_id,
             user_data={
                 "id": str(user_id),
@@ -185,16 +203,34 @@ class MobileAuthService:
         password: str,
         expected_role: str | None = None,
     ) -> AuthSessionDomain:
-        """Authenticate user by email or phone and return linked session."""
-        user = await self.auth_repo.get_by_email_or_phone(identifier)
-        if not user or not user.hashed_password:
+        """Authenticate user by email or role-scoped phone and return linked session."""
+        candidates = await self.auth_repo.list_by_email_or_phone(
+            identifier, expected_role=expected_role
+        )
+        if not isinstance(candidates, list):
+            single = await self.auth_repo.get_by_email_or_phone(identifier)
+            candidates = [single] if single else []
+
+        if not candidates:
             raise AuthenticationError("Invalid login credentials.")
 
-        if not user.is_active:
-            raise AuthenticationError("This account has been deactivated. Please contact support.")
+        matched_user: MobileUserCredentialsDomain | None = None
+        saw_inactive = False
+        for candidate in candidates:
+            if not candidate.hashed_password or not verify_password(password, candidate.hashed_password):
+                continue
+            if not candidate.is_active:
+                saw_inactive = True
+                continue
+            matched_user = candidate
+            break
 
-        if not verify_password(password, user.hashed_password):
+        if matched_user is None:
+            if saw_inactive:
+                raise AuthenticationError("This account has been deactivated. Please contact support.")
             raise AuthenticationError("Invalid login credentials.")
+
+        user = matched_user
 
         # Record sign-in timestamp
         await self.auth_repo.record_sign_in(user.id)

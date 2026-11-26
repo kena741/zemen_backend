@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.utils.phone import get_phone_search_variants, normalize_ethiopian_phone
 from app.domain.auth import MobileUserCredentialsDomain
 from app.persistence.repositories.base import BaseRepository
+from app.persistence.sqlalchemy.models.identity import Customer, Provider
 from app.persistence.sqlalchemy.models.users import User, UserRefreshToken
 
 
@@ -55,22 +56,81 @@ class MobileAuthRepository(BaseRepository[User, MobileUserCredentialsDomain]):
         return self.to_domain(user) if user else None
 
     async def get_by_phone(self, phone: str) -> MobileUserCredentialsDomain | None:
-        """Find active user by phone considering Ethiopian variants."""
+        """Find first active user by phone considering Ethiopian variants."""
         variants = get_phone_search_variants(phone)
         stmt = (
             select(User)
             .where(User.phone.in_(variants))
             .where(User.deleted_at.is_(None))
+            .order_by(User.created_at.asc())
         )
         res = await self.session.execute(stmt)
-        user = res.scalar_one_or_none()
+        user = res.scalars().first()
         return self.to_domain(user) if user else None
+
+    async def list_by_phone(self, phone: str) -> list[MobileUserCredentialsDomain]:
+        """Find all active users matching phone considering Ethiopian variants."""
+        variants = get_phone_search_variants(phone)
+        stmt = (
+            select(User)
+            .where(User.phone.in_(variants))
+            .where(User.deleted_at.is_(None))
+            .order_by(User.created_at.asc())
+        )
+        res = await self.session.execute(stmt)
+        return [self.to_domain(u) for u in res.scalars().all()]
+
+    async def list_users_by_customer_phone(self, phone: str) -> list[MobileUserCredentialsDomain]:
+        """Resolve active users linked to a Customer profile with matching phone."""
+        variants = get_phone_search_variants(phone)
+        stmt = (
+            select(User)
+            .join(Customer, Customer.user_id == User.id)
+            .where(Customer.phone.in_(variants))
+            .where(Customer.archived_at.is_(None))
+            .where(User.deleted_at.is_(None))
+            .order_by(User.created_at.asc())
+        )
+        res = await self.session.execute(stmt)
+        return [self.to_domain(u) for u in res.scalars().all()]
+
+    async def list_users_by_provider_phone(self, phone: str) -> list[MobileUserCredentialsDomain]:
+        """Resolve active users linked to a Provider profile with matching phoneNumber."""
+        variants = get_phone_search_variants(phone)
+        stmt = (
+            select(User)
+            .join(Provider, Provider.user_id == User.id)
+            .where(Provider.phone_number.in_(variants))
+            .where(Provider.archived_at.is_(None))
+            .where(User.deleted_at.is_(None))
+            .order_by(User.created_at.asc())
+        )
+        res = await self.session.execute(stmt)
+        return [self.to_domain(u) for u in res.scalars().all()]
 
     async def get_by_email_or_phone(self, identifier: str) -> MobileUserCredentialsDomain | None:
         """Find active user by either email or phone."""
         if "@" in identifier:
             return await self.get_by_email(identifier)
         return await self.get_by_phone(identifier)
+
+    async def list_by_email_or_phone(
+        self,
+        identifier: str,
+        expected_role: str | None = None,
+    ) -> list[MobileUserCredentialsDomain]:
+        """Resolve candidate users for email or role-scoped phone login."""
+        if "@" in identifier:
+            user = await self.get_by_email(identifier)
+            return [user] if user else []
+
+        if expected_role == "customer":
+            users = await self.list_users_by_customer_phone(identifier)
+            return users or await self.list_by_phone(identifier)
+        if expected_role == "provider":
+            users = await self.list_users_by_provider_phone(identifier)
+            return users or await self.list_by_phone(identifier)
+        return await self.list_by_phone(identifier)
 
     async def create_user(
         self,

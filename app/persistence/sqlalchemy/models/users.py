@@ -18,7 +18,7 @@ class User(Base):
         Uuid(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
     email: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True, index=True)
-    phone: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True, index=True)
+    phone: Mapped[str | None] = mapped_column(Text, nullable=True, unique=False, index=True)
     hashed_password: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_anonymous: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

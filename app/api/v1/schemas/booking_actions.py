@@ -3,6 +3,7 @@ from uuid import UUID
 from pydantic import Field
 
 from app.api.v1.schemas.base import MobileApiSchema
+from app.api.v1.schemas.enums import BookingStatus
 
 
 class RejectBookingBody(MobileApiSchema):
@@ -14,7 +15,7 @@ class AssignHandymanBody(MobileApiSchema):
 
 
 class SetBookingStatusBody(MobileApiSchema):
-    status: str
+    status: BookingStatus
     reason: str | None = None
     otp: str | None = None
 

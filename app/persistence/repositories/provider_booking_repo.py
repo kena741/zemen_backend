@@ -151,7 +151,7 @@ class ProviderBookingRepository(BaseRepository[BookedService, ProviderBookingHis
             tax_list=[],
             booking_date=booking_date,
             payment_completed=True,
-            payment_status="paid",
+            payment_status="payment_completed",
             status="completed",
             description=desc,
             admin_note=admin_note,

@@ -230,7 +230,7 @@ class BookingAdminRepository(BaseRepository[BookedService, BookingDetailDomain])
         stmt = (
             update(self.model)
             .where(self.model.id == booking_id)
-            .values(payment_completed=True, payment_status="paid")
+            .values(payment_completed=True, payment_status="payment_completed")
             .returning(self.model)
         )
         res = await self.session.execute(stmt)
@@ -240,7 +240,7 @@ class BookingAdminRepository(BaseRepository[BookedService, BookingDetailDomain])
             await self.session.execute(
                 update(Payment)
                 .where(Payment.booking_id == booking_id)
-                .values(status="paid", payment_method=payment_method, provider_ref=tx_ref)
+                .values(status="payment_completed", payment_method=payment_method, provider_ref=tx_ref)
             )
         return booking
 

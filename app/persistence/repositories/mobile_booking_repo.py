@@ -177,7 +177,7 @@ class MobileBookingRepository(BaseRepository[BookedService, BookingDomain]):
                 booking_address=payload.get("booking_address"),
                 service_details=payload.get("service_details"),
                 payment_type=payload.get("payment_type"),
-                payment_status=payload.get("payment_status", "pending"),
+                payment_status=payload.get("payment_status", "pending_payment"),
                 status=payload.get("status", "pending"),
                 reason=payload.get("reason"),
                 country_code=payload.get("country_code"),

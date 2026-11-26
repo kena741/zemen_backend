@@ -8,6 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.api.v1.schemas.enums import CompanyVerificationStatus
+
 
 class CreateProviderRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -65,7 +67,9 @@ class PatchCompanyProfileRequest(BaseModel):
     founded: str | None = None
     profile_bio: str | None = Field(default=None, alias="profileBio")
     banner_image: str | None = Field(default=None, alias="bannerImage")
-    company_verification_status: str | None = Field(default=None, alias="companyVerificationStatus")
+    company_verification_status: CompanyVerificationStatus | None = Field(
+        default=None, alias="companyVerificationStatus"
+    )
     company_license_url: str | None = Field(default=None, alias="companyLicenseUrl")
     company_rejection_reason: str | None = Field(default=None, alias="companyRejectionReason")
 

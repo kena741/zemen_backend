@@ -100,7 +100,7 @@ class BookingAdminService:
         total_amt = round(price_val * quantity, 2)
 
         payment_completed = False
-        payment_status_val = "pending"
+        payment_status_val = "pending_payment"
         now = datetime.now(timezone.utc)
         booking_id = uuid4()
         payment_id = uuid4()
@@ -128,10 +128,10 @@ class BookingAdminService:
             )
             self.booking_repo.session.add(tx)
             payment_completed = True
-            payment_status_val = "paid"
+            payment_status_val = "payment_completed"
         elif payment_path == "mark_paid":
             payment_completed = True
-            payment_status_val = "paid"
+            payment_status_val = "payment_completed"
 
         # Create BookedService entity
         booking_entity = BookedService(

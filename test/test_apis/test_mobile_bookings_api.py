@@ -106,6 +106,90 @@ def test_set_order_dual_casing(api_client, mock_booking_service):
     assert data["providerId"] == str(prov_id)
 
 
+def test_customer_create_booking_rejects_invalid_payment_status(api_client, mock_booking_service):
+    user_id = uuid4()
+    cust_id = uuid4()
+    prov_id = uuid4()
+
+    ctx = AuthContext(
+        user_id=user_id,
+        email="customer@example.com",
+        roles=["customer"],
+        customer_id=cust_id,
+    )
+    client = api_client(auth_context=ctx)
+    client.app.dependency_overrides[get_mobile_booking_service] = lambda: mock_booking_service
+
+    # Invalid paymentStatus "pending" (which caused the Postgres 500 error previously)
+    payload = {
+        "providerId": str(prov_id),
+        "serviceName": "House Cleaning",
+        "bookingDate": datetime.now(timezone.utc).isoformat(),
+        "paymentStatus": "pending",
+    }
+    res = client.post("/api/v1/bookings", json=payload)
+    assert res.status_code == 422
+    errors = res.json()["details"]["errors"]
+    assert any("payment_status" in err["field"] or "paymentStatus" in err["field"] for err in errors)
+
+
+def test_customer_create_booking_accepts_valid_payment_status(api_client, mock_booking_service):
+    user_id = uuid4()
+    cust_id = uuid4()
+    prov_id = uuid4()
+    booking_id = uuid4()
+
+    mock_booking_service.create_or_update_booking.return_value = BookingDomain(
+        id=booking_id,
+        provider_id=prov_id,
+        customer_id=cust_id,
+        service_name="House Cleaning",
+        status="pending",
+        payment_status="pending_payment",
+    )
+
+    ctx = AuthContext(
+        user_id=user_id,
+        email="customer@example.com",
+        roles=["customer"],
+        customer_id=cust_id,
+    )
+    client = api_client(auth_context=ctx)
+    client.app.dependency_overrides[get_mobile_booking_service] = lambda: mock_booking_service
+
+    payload = {
+        "providerId": str(prov_id),
+        "serviceName": "House Cleaning",
+        "bookingDate": datetime.now(timezone.utc).isoformat(),
+        "paymentStatus": "pending_payment",
+    }
+    res = client.post("/api/v1/bookings", json=payload)
+    assert res.status_code == 201
+
+
+def test_set_booking_status_rejects_invalid_status(api_client, mock_lifecycle_service):
+    user_id = uuid4()
+    prov_id = uuid4()
+    booking_id = uuid4()
+
+    ctx = AuthContext(
+        user_id=user_id,
+        email="provider@example.com",
+        roles=["provider"],
+        provider_id=prov_id,
+    )
+    client = api_client(auth_context=ctx)
+    client.app.dependency_overrides[get_booking_lifecycle_service] = lambda: mock_lifecycle_service
+
+    res = client.post(
+        f"/api/v1/bookings/{booking_id}/status",
+        json={"status": "invalid_status_value"},
+    )
+    assert res.status_code == 422
+    errors = res.json()["details"]["errors"]
+    assert any("status" in err["field"] for err in errors)
+
+
 def test_provider_list_bookings_and_earnings(api_client, mock_booking_service):
     user_id = uuid4()
     prov_id = uuid4()

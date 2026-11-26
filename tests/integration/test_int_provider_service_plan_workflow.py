@@ -178,7 +178,7 @@ async def test_provider_plan_and_service_quota_lifecycle(
     ledger_stmt = (
         select(ServiceTierPayment)
         .where(ServiceTierPayment.provider_id == provider_id)
-        .order_by(ServiceTierPayment.id.desc())
+        .order_by(ServiceTierPayment.created_at.desc())
     )
     ledger_res = await db_session.execute(ledger_stmt)
     tier_payment_record = ledger_res.scalars().first()

@@ -9,13 +9,14 @@ from uuid import UUID
 from pydantic import Field
 
 from app.api.v1.schemas.base import MobileApiSchema
+from app.api.v1.schemas.enums import FeatureRequestStatus
 
 
 class JobRequestOut(MobileApiSchema):
     id: str
     created_at: datetime = Field(serialization_alias="createdAt")
     accepted: bool | None = None
-    status: str | None = None
+    status: FeatureRequestStatus | None = None
     is_paid: bool | None = Field(default=None, serialization_alias="isPaid")
     bid_list: list[Any] = Field(default_factory=list, serialization_alias="bidList")
     bid_price: str | None = Field(default=None, serialization_alias="bidPrice")
@@ -35,7 +36,7 @@ class JobRequestCreate(MobileApiSchema):
     id: str | None = None
     created_at: datetime | str | None = Field(default=None, alias="createdAt")
     accepted: bool | None = False
-    status: str | None = "accepted"
+    status: FeatureRequestStatus | None = "accepted"
     is_paid: bool | None = Field(default=False, alias="isPaid")
     bid_list: list[Any] = Field(default_factory=list, alias="bidList")
     bid_price: str | None = Field(default="0", alias="bidPrice")

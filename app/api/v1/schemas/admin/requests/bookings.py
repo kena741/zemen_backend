@@ -8,6 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api.v1.schemas.enums import BookingStatus
+
 
 class CreateBookingRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -30,7 +32,7 @@ class CreateBookingRequest(BaseModel):
 class UpdateBookingStatusRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    status: str
+    status: BookingStatus
     apply_commission: bool = Field(default=True, alias="applyCommission")
     commission_percent: float | None = Field(default=10.0, alias="commissionPercent")
     notify_provider: bool = Field(default=True, alias="notifyProvider")

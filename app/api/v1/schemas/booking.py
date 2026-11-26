@@ -10,6 +10,7 @@ from uuid import UUID
 from pydantic import Field
 
 from app.api.v1.schemas.base import MobileApiSchema
+from app.api.v1.schemas.enums import BookingStatus, PaymentStatus
 
 
 class BookingOut(MobileApiSchema):
@@ -36,8 +37,8 @@ class BookingOut(MobileApiSchema):
     quantity: int = 1
     booking_date: datetime = Field(serialization_alias="bookingDate")
     payment_completed: bool = Field(default=False, serialization_alias="paymentCompleted")
-    payment_status: str = Field(default="pending", serialization_alias="paymentStatus")
-    status: str | None = "pending"
+    payment_status: PaymentStatus = Field(default="pending_payment", serialization_alias="paymentStatus")
+    status: BookingStatus | None = "pending"
     payment_type: str | None = Field(default=None, serialization_alias="paymentType")
     description: str | None = None
     service_image: str | None = Field(default=None, serialization_alias="serviceImage")
@@ -95,8 +96,8 @@ class BookingCreate(MobileApiSchema):
     quantity: int = 1
     booking_date: datetime | str | None = Field(default=None, alias="bookingDate")
     payment_completed: bool | None = Field(default=False, alias="paymentCompleted")
-    payment_status: str | None = Field(default="pending", alias="paymentStatus")
-    status: str | None = "pending"
+    payment_status: PaymentStatus = Field(default="pending_payment", alias="paymentStatus")
+    status: BookingStatus | None = "pending"
     payment_type: str | None = Field(default=None, alias="paymentType")
     description: str | None = None
     booking_address: dict[str, Any] | None = Field(default=None, alias="bookingAddress")

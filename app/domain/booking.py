@@ -26,7 +26,7 @@ class BookingDetailDomain:
     quantity: int = 1
     booking_date: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     payment_completed: bool = False
-    payment_status: str = "pending"
+    payment_status: str = "pending_payment"
     payment_type: str | None = None
     status: str | None = "pending"
     description: str | None = None
@@ -89,7 +89,7 @@ class BookingDomain:
     quantity: int = 1
     booking_date: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     payment_completed: bool = False
-    payment_status: str = "pending"
+    payment_status: str = "pending_payment"
     payment_type: str | None = None
     status: str | None = "pending"
     reason: str | None = None

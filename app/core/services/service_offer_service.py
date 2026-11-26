@@ -189,7 +189,7 @@ class ServiceOfferService:
             "booking_date": offer.booking_date or now,
             "booking_address": offer.booking_address,
             "status": "accepted",
-            "payment_status": "pending",
+            "payment_status": "pending_payment",
             "payment_completed": False,
         }
         new_booking = await self.booking_repo.upsert_booking(booking_data)

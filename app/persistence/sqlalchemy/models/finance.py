@@ -1,8 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Integer, Numeric, Text, Uuid
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, Numeric, Text, Uuid, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -103,11 +103,18 @@ class ServiceTierPayment(Base):
 
     __tablename__ = "service_tier_payment"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4, server_default=text("gen_random_uuid()")
+    )
     provider_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    from_tier_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    to_tier_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     tier_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     tier_name: Mapped[str] = mapped_column(Text, nullable=False, default="Tier")
     amount: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
+    tx_ref: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    chapa_status: Mapped[str | None] = mapped_column(Text, nullable=True)
     payment_status: Mapped[str] = mapped_column(Text, nullable=False, default="success")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -354,7 +354,7 @@ class ChapaPaymentService:
                 stmt_rec = (
                     select(ServiceTierPayment)
                     .where(ServiceTierPayment.provider_id == provider_id)
-                    .order_by(ServiceTierPayment.id.desc())
+                    .order_by(ServiceTierPayment.created_at.desc())
                     .limit(1)
                 )
                 res_rec = await session.execute(stmt_rec)

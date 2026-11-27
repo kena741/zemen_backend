@@ -101,6 +101,8 @@ class Settings(BaseSettings):
     CHAPA_SECRET_KEY: str = ""
     CHAPA_PUBLIC_KEY: str = ""
     CHAPA_WEBHOOK_SECRET: str = ""
+    # Shared with Next.js; allows Telebirr-verified tier applies without Chapa.
+    PAYMENT_CONFIRM_SECRET: str = ""
     CHAPA_INITIALIZE_URL: str = "https://api.chapa.co/v1/transaction/initialize"
     CHAPA_VERIFY_URL: str = "https://api.chapa.co/v1/transaction/verify"
     CHAPA_TRANSFERS_URL: str = "https://api.chapa.co/v1/transfers"

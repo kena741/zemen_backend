@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.schemas.payments import (
@@ -179,13 +181,36 @@ async def verify_provider_activation(
 )
 async def verify_service_tier_payment(
     body: TierPaymentVerifyRequest,
+    request: Request,
     service: Annotated[ChapaPaymentService, Depends(get_chapa_payment_service)],
 ) -> dict[str, Any]:
+    skip = bool(body.skip_gateway_verify)
+    if skip:
+        secret = (settings.PAYMENT_CONFIRM_SECRET or "").strip()
+        provided = (request.headers.get("x-zemen-pay-sig") or "").strip()
+        if not secret or not provided:
+            raise HTTPException(
+                status_code=403, detail="Payment confirm signature required"
+            )
+        tier = "" if body.tier_max is None else str(body.tier_max)
+        amt = "" if body.amount is None else f"{float(body.amount):.2f}"
+        payload = f"{body.tx_ref}:{body.provider_id}:{tier}:{amt}"
+        expected = hmac.new(
+            secret.encode("utf-8"),
+            payload.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(provided, expected):
+            raise HTTPException(
+                status_code=403, detail="Invalid payment confirm signature"
+            )
+
     return await service.verify_service_tier_payment(
         tx_ref=body.tx_ref,
         provider_id=body.provider_id,
         amount=body.amount,
         target_tier=body.tier_max,
+        skip_gateway_verify=skip,
     )
 
 

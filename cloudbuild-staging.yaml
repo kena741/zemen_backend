@@ -112,7 +112,8 @@ steps:
           --set-secrets=STAGING_TELEGRAM_BOT_TOKEN=STAGING_TELEGRAM_BOT_TOKEN:latest \
           --set-secrets=STAGING_TELEGRAM_WEBHOOK_SECRET=STAGING_TELEGRAM_WEBHOOK_SECRET:latest \
           --set-secrets=STAGING_TELEGRAM_WEBHOOK_URL=STAGING_TELEGRAM_WEBHOOK_URL:latest \
-          --set-secrets=AFRO_SMS_TOKEN=AFRO_SMS_TOKEN:latest
+          --set-secrets=AFRO_SMS_TOKEN=AFRO_SMS_TOKEN:latest \
+          --set-secrets=PAYMENT_CONFIRM_SECRET=PAYMENT_CONFIRM_SECRET:latest
     waitFor: ["build-and-push-image"]
 
 substitutions:

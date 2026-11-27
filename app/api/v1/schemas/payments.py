@@ -89,6 +89,15 @@ class FeaturedPaymentVerifyRequest(MobileApiSchema):
     user_id: UUID | None = Field(default=None, alias="userId")
 
 
+class WalletTopupVerifyRequest(MobileApiSchema):
+    """Credit wallet after gateway confirm. Telebirr uses skipGatewayVerify + X-Zemen-Pay-Sig."""
+
+    tx_ref: str = Field(alias="txRef")
+    amount: float
+    account_type: str = Field(default="customer", alias="accountType")
+    skip_gateway_verify: bool = Field(default=False, alias="skipGatewayVerify")
+
+
 class PaymentSettingsOut(MobileApiSchema):
     chapa_public_key: str = Field(serialization_alias="chapaPublicKey")
     is_test: bool = Field(serialization_alias="isTest")

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from decimal import Decimal
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
+from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.schemas.base import MobileApiSchema
 from app.api.v1.schemas.booking import (
     BookingCreate,
     BookingOut,
@@ -23,6 +26,7 @@ from app.api.v1.schemas.booking_actions import (
 )
 from app.api.v1.schemas.common import Page, PageMeta
 from app.core.security.deps import RequireAuth, RequireCustomer, RequireProvider
+from app.core.services import payment_writes
 from app.core.services.booking_lifecycle_service import BookingLifecycleService
 from app.core.services.mobile_booking_service import MobileBookingService
 from app.core.services.recurring_booking_service import RecurringBookingService
@@ -31,6 +35,12 @@ from app.persistence.repositories.handyman_repo import HandymanRepository
 from app.persistence.repositories.mobile_booking_repo import MobileBookingRepository
 from app.persistence.repositories.provider_repo import ProviderRepository
 from app.persistence.sqlalchemy.deps import get_db
+
+
+class PayBookingWalletBody(MobileApiSchema):
+    extra_payment: bool = Field(default=False, alias="extraPayment")
+    remaining_balance: bool = Field(default=False, alias="remainingBalance")
+    full_obligation: float | None = Field(default=None, alias="fullObligation")
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
@@ -72,6 +82,7 @@ async def list_customer_bookings(
     ctx: RequireCustomer,
     service: Annotated[MobileBookingService, Depends(get_mobile_booking_service)],
     status: str | None = Query(None),
+    include_archived: bool = Query(False, alias="includeArchived"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> Page[BookingOut]:
@@ -79,6 +90,7 @@ async def list_customer_bookings(
     rows = await service.list_customer_bookings(
         customer_id=ctx.customer_id,
         status=status,
+        include_archived=include_archived,
         limit=limit,
         offset=offset,
     )
@@ -121,6 +133,7 @@ async def list_provider_bookings(
     status: str | None = Query(None),
     is_upcoming: bool = Query(False, alias="isUpcoming"),
     is_completed: bool = Query(False, alias="isCompleted"),
+    include_archived: bool = Query(False, alias="includeArchived"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> Page[BookingOut]:
@@ -130,6 +143,7 @@ async def list_provider_bookings(
         status=status,
         is_upcoming=is_upcoming,
         is_completed=is_completed,
+        include_archived=include_archived,
         limit=limit,
         offset=offset,
     )
@@ -350,6 +364,32 @@ async def refund_on_decline(
     return await lifecycle.refund_on_decline(
         booking_id=booking_id,
         provider_id=ctx.provider_id,
+    )
+
+
+@router.post(
+    "/{booking_id}/pay-wallet",
+    summary="Pay booking from customer wallet (debit + mark paid)",
+)
+async def pay_booking_wallet(
+    booking_id: UUID,
+    ctx: RequireCustomer,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    body: PayBookingWalletBody | None = None,
+) -> dict[str, Any]:
+    payload = body or PayBookingWalletBody()
+    full = (
+        Decimal(str(payload.full_obligation))
+        if payload.full_obligation is not None
+        else None
+    )
+    return await payment_writes.pay_booking_with_wallet(
+        db,
+        ctx=ctx,
+        booking_id=booking_id,
+        extra_payment=payload.extra_payment,
+        remaining_balance=payload.remaining_balance,
+        full_obligation=full,
     )
 
 

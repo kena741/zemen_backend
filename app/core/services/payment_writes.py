@@ -18,6 +18,7 @@ from app.core.security.deps import AuthContext
 from app.core.services import booking_service, chapa_client, commission, ledger
 from app.core.services.chapa_client import ChapaHttp
 from app.persistence.repositories.customer_repo import CustomerRepository
+from app.persistence.repositories.provider_repo import ProviderRepository
 from app.persistence.sqlalchemy.models import (
     BookedService,
     Customer,
@@ -303,7 +304,7 @@ WALLET_TOPUP_NOTE = "Wallet top-up"
 async def credit_wallet_topup(
     db: AsyncSession,
     *,
-    ctx: AuthContext,
+    user_id: UUID,
     tx_ref: str,
     amount: Decimal,
     account_type: str = "customer",
@@ -320,15 +321,15 @@ async def credit_wallet_topup(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Amount must be greater than 0")
 
     if kind == "customer":
-        if ctx.customer_id is None:
+        customer = await CustomerRepository(db).get_by_user_id(user_id)
+        if customer is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Customer profile required")
-        owner_id = ctx.customer_id
-        user_id = ctx.user_id
+        owner_id = customer.id
     else:
-        if ctx.provider_id is None:
+        provider = await ProviderRepository(db).get_by_user_id(user_id)
+        if provider is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Provider profile required")
-        owner_id = ctx.provider_id
-        user_id = ctx.user_id
+        owner_id = provider.id
 
     row, created = await ledger.apply_ledger(
         db,

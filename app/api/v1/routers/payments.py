@@ -240,7 +240,6 @@ async def verify_featured_request_payment(
 async def wallet_topup(
     body: WalletTopupVerifyRequest,
     request: Request,
-    ctx: RequireAuth,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict[str, Any]:
     if not body.skip_gateway_verify:
@@ -248,13 +247,16 @@ async def wallet_topup(
             status_code=400,
             detail="skipGatewayVerify is required (gateway confirm happens on the web app)",
         )
+    if body.user_id is None:
+        raise HTTPException(status_code=400, detail="userId is required")
     secret = (settings.PAYMENT_CONFIRM_SECRET or "").strip()
     provided = (request.headers.get("x-zemen-pay-sig") or "").strip()
     if not secret or not provided:
         raise HTTPException(status_code=403, detail="Payment confirm signature required")
     account = (body.account_type or "customer").strip().lower()
     amt = f"{float(body.amount):.2f}"
-    payload = f"{body.tx_ref}:{account}:{amt}"
+    # Include userId so Telebirr return can credit without a browser session JWT.
+    payload = f"{body.tx_ref}:{account}:{amt}:{body.user_id}"
     expected = hmac.new(
         secret.encode("utf-8"),
         payload.encode("utf-8"),
@@ -265,7 +267,7 @@ async def wallet_topup(
 
     return await payment_writes.credit_wallet_topup(
         db,
-        ctx=ctx,
+        user_id=body.user_id,
         tx_ref=body.tx_ref,
         amount=Decimal(amt),
         account_type=account,

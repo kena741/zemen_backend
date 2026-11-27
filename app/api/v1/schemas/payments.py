@@ -96,6 +96,8 @@ class WalletTopupVerifyRequest(MobileApiSchema):
     amount: float
     account_type: str = Field(default="customer", alias="accountType")
     skip_gateway_verify: bool = Field(default=False, alias="skipGatewayVerify")
+    # Auth user id — required for signed fulfill without a Bearer (Telebirr return loses session).
+    user_id: UUID | None = Field(default=None, alias="userId")
 
 
 class PaymentSettingsOut(MobileApiSchema):

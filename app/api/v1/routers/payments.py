@@ -10,6 +10,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from decimal import Decimal
+
 from app.api.v1.schemas.payments import (
     ActivationVerifyRequest,
     BankOut,
@@ -23,6 +25,7 @@ from app.api.v1.schemas.payments import (
     SubscriptionPlanOut,
     TierPaymentVerifyRequest,
     TierPurchaseInitiateRequest,
+    WalletTopupVerifyRequest,
 )
 from app.config import settings
 from app.core.security.deps import RequireAuth, RequireProvider
@@ -227,6 +230,46 @@ async def verify_featured_request_payment(
         provider_id=body.provider_id,
         service_id=body.service_id,
         amount=body.amount,
+    )
+
+
+@router.post(
+    "/wallet/topup",
+    summary="Credit wallet after confirmed gateway top-up (Telebirr via signed skip)",
+)
+async def wallet_topup(
+    body: WalletTopupVerifyRequest,
+    request: Request,
+    ctx: RequireAuth,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    if not body.skip_gateway_verify:
+        raise HTTPException(
+            status_code=400,
+            detail="skipGatewayVerify is required (gateway confirm happens on the web app)",
+        )
+    secret = (settings.PAYMENT_CONFIRM_SECRET or "").strip()
+    provided = (request.headers.get("x-zemen-pay-sig") or "").strip()
+    if not secret or not provided:
+        raise HTTPException(status_code=403, detail="Payment confirm signature required")
+    account = (body.account_type or "customer").strip().lower()
+    amt = f"{float(body.amount):.2f}"
+    payload = f"{body.tx_ref}:{account}:{amt}"
+    expected = hmac.new(
+        secret.encode("utf-8"),
+        payload.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=403, detail="Invalid payment confirm signature")
+
+    return await payment_writes.credit_wallet_topup(
+        db,
+        ctx=ctx,
+        tx_ref=body.tx_ref,
+        amount=Decimal(amt),
+        account_type=account,
+        payment_type="telebirr",
     )
 
 

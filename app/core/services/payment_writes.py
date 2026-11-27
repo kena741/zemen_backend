@@ -297,6 +297,60 @@ async def request_withdrawal(
 
 
 SERVICE_FEE_NOTE = "Service fee debited"
+WALLET_TOPUP_NOTE = "Wallet top-up"
+
+
+async def credit_wallet_topup(
+    db: AsyncSession,
+    *,
+    ctx: AuthContext,
+    tx_ref: str,
+    amount: Decimal,
+    account_type: str = "customer",
+    payment_type: str = "telebirr",
+) -> dict:
+    """Idempotent wallet credit for a confirmed gateway top-up (tx_ref as transaction id)."""
+    kind = (account_type or "customer").strip().lower()
+    if kind not in {"customer", "provider"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid accountType")
+    tx_clean = (tx_ref or "").strip()
+    if not tx_clean:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="tx_ref is required")
+    if amount <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Amount must be greater than 0")
+
+    if kind == "customer":
+        if ctx.customer_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Customer profile required")
+        owner_id = ctx.customer_id
+        user_id = ctx.user_id
+    else:
+        if ctx.provider_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Provider profile required")
+        owner_id = ctx.provider_id
+        user_id = ctx.user_id
+
+    row, created = await ledger.apply_ledger(
+        db,
+        kind=kind,
+        owner_id=owner_id,
+        user_id=user_id,
+        amount=amount,
+        is_credit=True,
+        note=WALLET_TOPUP_NOTE,
+        transaction_id=tx_clean,
+        payment_type=payment_type,
+    )
+    await db.flush()
+    return {
+        "status": "success",
+        "purpose": "wallet",
+        "tx_ref": tx_clean,
+        "amount": row.amount,
+        "created": created,
+        "id": str(row.id),
+        "accountType": kind,
+    }
 
 
 async def pay_booking_with_wallet(

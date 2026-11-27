@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security.deps import AuthContext
 from app.core.services import booking_service, chapa_client, commission, ledger
 from app.core.services.chapa_client import ChapaHttp
+from app.persistence.repositories.customer_repo import CustomerRepository
 from app.persistence.sqlalchemy.models import (
     BookedService,
     Customer,
@@ -316,9 +317,8 @@ async def pay_booking_with_wallet(
     if customer_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
 
-    customer = (
-        await db.execute(select(Customer).where(Customer.id == customer_id))
-    ).scalar_one_or_none()
+    customer_repo = CustomerRepository(db)
+    customer = await customer_repo.get_by_id(customer_id)
     if customer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
 
@@ -373,7 +373,9 @@ async def pay_booking_with_wallet(
         booking.total_amount = amount if amount > 0 else booking.total_amount
 
     await db.flush()
-    await db.refresh(customer)
+    customer = await customer_repo.get_by_id(customer_id)
+    if customer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
 
     return {
         "ok": True,

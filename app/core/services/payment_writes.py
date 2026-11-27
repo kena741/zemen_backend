@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security.deps import AuthContext
 from app.core.services import booking_service, chapa_client, commission, ledger
 from app.core.services.chapa_client import ChapaHttp
+from app.persistence.repositories.customer_repo import CustomerRepository
 from app.persistence.sqlalchemy.models import (
     BookedService,
     Customer,
@@ -293,6 +294,96 @@ async def request_withdrawal(
     await db.flush()
     await db.refresh(row)
     return row
+
+
+SERVICE_FEE_NOTE = "Service fee debited"
+
+
+async def pay_booking_with_wallet(
+    db: AsyncSession,
+    *,
+    ctx: AuthContext,
+    booking_id: UUID,
+    extra_payment: bool = False,
+    remaining_balance: bool = False,
+    full_obligation: Decimal | None = None,
+) -> dict:
+    """Debit customer wallet for an unpaid booking owned by the caller."""
+    booking = await booking_service.get_booking(db, booking_id)
+    if booking is None or not _owns_customer(booking, ctx):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+
+    customer_id = booking.customer_id or ctx.customer_id
+    if customer_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+
+    customer_repo = CustomerRepository(db)
+    customer = await customer_repo.get_by_id(customer_id)
+    if customer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+
+    if booking.payment_completed is True and not extra_payment and not remaining_balance:
+        return {
+            "ok": True,
+            "bookingId": str(booking.id),
+            "newBalance": float(ledger.parse_money(customer.wallet_amount)),
+            "amount": "0",
+            "created": False,
+        }
+
+    amount = commission.booking_gross(booking)
+    if remaining_balance and full_obligation is not None and full_obligation > 0:
+        paid = ledger.parse_money(booking.total_amount)
+        amount = max(full_obligation - paid, Decimal("0"))
+    if extra_payment:
+        extra = ledger.parse_money(booking.extra_charge_amount)
+        if extra > 0:
+            amount = extra
+
+    balance = ledger.parse_money(customer.wallet_amount)
+    if amount > 0 and amount > balance:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Wallet amount insufficient.",
+        )
+
+    created = False
+    if amount > 0:
+        _row, created = await ledger.apply_ledger(
+            db,
+            kind="customer",
+            owner_id=customer_id,
+            user_id=booking.customer_user_id or ctx.user_id,
+            amount=amount,
+            is_credit=False,
+            note=SERVICE_FEE_NOTE,
+            transaction_id=str(booking.id),
+            payment_type="wallet",
+        )
+
+    booking.payment_completed = True
+    booking.payment_status = "payment_completed"
+    booking.payment_type = "wallet"
+    booking.next_cycle_due = False
+    if extra_payment:
+        booking.status = "pending_approval"
+    elif remaining_balance and full_obligation is not None and full_obligation > 0:
+        booking.total_amount = full_obligation
+    else:
+        booking.total_amount = amount if amount > 0 else booking.total_amount
+
+    await db.flush()
+    customer = await customer_repo.get_by_id(customer_id)
+    if customer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+
+    return {
+        "ok": True,
+        "bookingId": str(booking.id),
+        "newBalance": float(ledger.parse_money(customer.wallet_amount)),
+        "amount": ledger.format_provider_wallet(amount),
+        "created": created,
+    }
 
 
 async def cancel_pending_withdrawal(db: AsyncSession, *, ctx: AuthContext, withdrawal_id: UUID) -> WithdrawalHistory:
